@@ -1,0 +1,25 @@
+# 機密情報
+*.key
+*.pem
+*.secret
+secrets/
+credentials/
+
+# VyOS設定バックアップ（機密情報を含む可能性）
+*.boot
+
+# 一時ファイル
+claude_tmp/
+*.tmp
+*.log
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db
+
+# エディタ
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
