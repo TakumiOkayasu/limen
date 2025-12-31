@@ -62,9 +62,16 @@ set protocols static route <target>/32 next-hop 192.168.100.1
   - ダウンロード: https://vyos.net/get/nightly-builds/
   - ドキュメント: https://docs.vyos.io/
 - **NIC**: Intel X540-T2 (10GbE)
-- **L2スイッチ**: BUFFALO LXW-10G5 (10GbE対応、ONU直下で分岐用)
+- **L2スイッチ**: BUFFALO LXW-10G5 (10GbE 5ポート、ONU直下で分岐用)
 - **ISP**: BIGLOBE (IPv6 IPoE + MAP-E)
-- **既存ルーター**: Buffalo WXR9300BE6P
+- **既存ルーター**: Buffalo WXR9300BE6P (10Gポート×1, 2.5Gポート×1, 1Gポート×4)
+
+### 速度目標
+
+| プロトコル | 経路 | 目標速度 |
+|-----------|------|----------|
+| IPv6 | 自作ルーター → LXW-10G5 → ONU → NGN | 10Gbps狙い |
+| IPv4 | 自作ルーター → WXR → MAP-E | 2〜3Gbps期待 |
 
 ---
 

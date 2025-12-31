@@ -19,13 +19,15 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### 物理構成
 
 ```
-[ONU] ── [L2 SW] ─┬─ 10G ── [自作ルーター] ── [LAN]
-                  │                │
-                  │           (別セグメント)
-                  │                │
-                  └─ 1G/2.5G ── [WXR9300BE6P]
+[ONU] ── [LXW-10G5] ─┬─ 10G ── [自作ルーター] ── [LAN]
+                     │                │
+                     │           (別セグメント)
+                     │                │
+                     └─ 10G ── [WXR9300BE6P]
                                (MAP-E専用)
 ```
+
+- **LXW-10G5**: BUFFALO 10GbE L2スイッチ (5ポート)
 
 ### 役割分担
 
@@ -36,8 +38,8 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ### トラフィックフロー
 
-- **IPv6**: LAN → 自作ルーター → ONU → NGN (10Gbps)
-- **IPv4**: LAN → 自作ルーター → WXR → MAP-Eトンネル (1-2Gbps上限)
+- **IPv6**: LAN → 自作ルーター → LXW-10G5 → ONU → NGN (10Gbps狙い)
+- **IPv4**: LAN → 自作ルーター → WXR → MAP-Eトンネル (2〜3Gbps期待)
 
 ---
 
