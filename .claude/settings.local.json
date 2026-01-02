@@ -5,7 +5,11 @@
       "WebFetch(domain:docs.vyos.io)",
       "WebFetch(domain:forum.vyos.io)",
       "Bash(git checkout:*)",
-      "WebFetch(domain:www.amazon.co.jp)"
+      "WebFetch(domain:www.amazon.co.jp)",
+      "Bash(mkdir:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(done)",
+      "Bash(grep:*)"
     ]
   }
 }

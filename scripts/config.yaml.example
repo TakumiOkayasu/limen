@@ -1,0 +1,47 @@
+# VyOS設定スクリプト用設定ファイル
+#
+# 使用方法:
+#   1. このファイルを config.yaml としてコピー
+#   2. 環境に合わせて値を編集
+#   3. python3 vyos_config.py <phase> で設定コマンドを生成
+
+# タイムゾーン
+timezone: "Asia/Tokyo"
+
+# NTPサーバー
+ntp_servers:
+  - "ntp.nict.jp"
+  - "time.cloudflare.com"
+
+# インターフェース名
+# VyOSインストール後に `show interfaces` で実際の名前を確認
+wan_interface: "eth0"   # WAN側 (LXW-10G5へ、10GbE)
+lan_interface: "eth1"   # LAN側 (10GbE)
+wxr_interface: "eth2"   # WXR接続用 (5GbE NIC)
+
+# LAN設定
+lan_ipv4: "192.168.1.1/24"
+lan_ipv4_network: "192.168.1.0/24"
+
+# WXR接続セグメント
+wxr_segment_self: "192.168.100.2/24"
+wxr_segment_gw: "192.168.100.1"
+
+# DHCPv6-PD
+pd_length: 56       # プレフィックス長 (BIGLOBEは/56)
+pd_sla_id: 1        # LAN側に割り当てるSLA-ID
+
+# DNS (IPv6)
+dns_ipv6: "2001:4860:4860::8888"  # Google Public DNS
+
+# WireGuard
+wg_interface: "wg0"
+wg_port: 51820
+wg_ipv4: "10.10.10.1/24"
+wg_ipv6: "fd00:vpn::1/64"
+
+# DDNS (Cloudflare)
+# 設定する場合はコメントを外して編集
+# ddns_zone: "example.com"
+# ddns_hostname: "router.example.com"
+# ddns_api_token: "your-cloudflare-api-token"

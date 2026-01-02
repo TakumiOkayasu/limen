@@ -105,9 +105,9 @@ show interfaces
 **想定される対応表**:
 | 想定名 | 実際の名前(要確認) | 用途 |
 |--------|-------------------|------|
-| eth0 | enp?s?f? | WAN (10GbE) |
-| eth1 | enp?s?f? | LAN (10GbE) |
-| eth2 | enp0s31f6等 | WXR接続 (1GbE内蔵) |
+| eth0 | enp?s?f? | WAN (10GbE, Intel X540-T2) |
+| eth1 | enp?s?f? | LAN (10GbE, Intel X540-T2) |
+| eth2 | enp?s?f? | WXR接続 (5GbE, RTL8126) |
 
 **注意**: 実際のインターフェース名はハードウェア構成により異なる。VyOSはPredictable Network Interface Names(enp*形式)を使用する可能性あり。
 
