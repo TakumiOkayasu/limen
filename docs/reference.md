@@ -82,7 +82,7 @@ set protocols static route <target>/32 next-hop 192.168.100.1
 ### ネットワーク機器
 
 - **L2スイッチ**: BUFFALO LXW-10G5 (10GbE 5ポート、ONU直下で分岐用)
-- **既存ルーター**: Buffalo WXR9300BE6P (10Gポート×1, 2.5Gポート×1, 1Gポート×4)
+- **既存ルーター**: Buffalo WXR9300BE6P (10Gポート×1, 1Gポート×4)
 
 ### ソフトウェア
 
@@ -116,7 +116,7 @@ show interfaces
 | プロトコル | 経路 | 目標速度 |
 |-----------|------|----------|
 | IPv6 | 自作ルーター → LXW-10G5 → ONU → NGN | 10Gbps狙い |
-| IPv4 | 自作ルーター → WXR → MAP-E | 2〜3Gbps期待 |
+| IPv4 | 自作ルーター → WXR → MAP-E | 1Gbps上限 |
 
 ---
 
