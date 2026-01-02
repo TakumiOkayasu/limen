@@ -58,13 +58,58 @@ set protocols static route <target>/32 next-hop 192.168.100.1
 
 ## 環境情報
 
+### ハードウェア
+
+**自作ルーター本体**: HP ProDesk 600 G4 SFF
+- CPU: Intel Core i5-8500 (6コア)
+- RAM: 8GB DDR4-2666
+- ストレージ: 2.5インチ SATA SSD (VyOS用に換装)
+- 拡張スロット: PCIe x16, PCIe x1, M.2 2280 NVMe
+
+**追加NIC 1**: Intel X540-T2 (10GbE, PCIe x8) → PCIe x16スロット
+- ポート数: 2
+- eth0: WAN (LXW-10G5へ)
+- eth1: LAN
+
+**追加NIC 2**: Binardat RTL8126 (5GbE, PCIe x1) → PCIe x1スロット
+- eth2: WXR接続用 (IPv4転送)
+- 対応速度: 5G/2.5G/1G/100Mbps
+- ロープロファイル対応
+
+**内蔵NIC**: Intel I219-LM (1GbE)
+- 未使用 (予備)
+
+### ネットワーク機器
+
+- **L2スイッチ**: BUFFALO LXW-10G5 (10GbE 5ポート、ONU直下で分岐用)
+- **既存ルーター**: Buffalo WXR9300BE6P (10Gポート×1, 2.5Gポート×1, 1Gポート×4)
+
+### ソフトウェア
+
 - **OS**: VyOS Rolling Release (無償版、Debian 12ベース)
   - ダウンロード: https://vyos.net/get/nightly-builds/
   - ドキュメント: https://docs.vyos.io/
-- **NIC**: Intel X540-T2 (10GbE)
-- **L2スイッチ**: BUFFALO LXW-10G5 (10GbE 5ポート、ONU直下で分岐用)
+
+### ISP
+
 - **ISP**: BIGLOBE (IPv6 IPoE + MAP-E)
-- **既存ルーター**: Buffalo WXR9300BE6P (10Gポート×1, 2.5Gポート×1, 1Gポート×4)
+- **回線**: 10Gbps
+
+### インターフェース名の確認
+
+VyOSインストール後、実際のインターフェース名を確認:
+```bash
+show interfaces
+```
+
+**想定される対応表**:
+| 想定名 | 実際の名前(要確認) | 用途 |
+|--------|-------------------|------|
+| eth0 | enp?s?f? | WAN (10GbE) |
+| eth1 | enp?s?f? | LAN (10GbE) |
+| eth2 | enp0s31f6等 | WXR接続 (1GbE内蔵) |
+
+**注意**: 実際のインターフェース名はハードウェア構成により異なる。VyOSはPredictable Network Interface Names(enp*形式)を使用する可能性あり。
 
 ### 速度目標
 

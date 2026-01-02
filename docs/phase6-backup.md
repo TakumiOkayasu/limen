@@ -62,10 +62,30 @@ chmod +x /config/scripts/backup.sh
 
 ### 外部バックアップ（推奨）
 
+**方法1: SCPで外部サーバーに転送**
 ```bash
-# SCPで外部サーバーに転送
 scp /config/config.boot user@backup-server:/backups/vyos/
 ```
+
+**方法2: Mac側からpullする**
+```bash
+# Mac側で実行
+scp vyos:/config/config.boot ~/backups/vyos/config-$(date +%Y%m%d).boot
+```
+
+**方法3: Gitリポジトリで管理**
+```bash
+# Mac側でバックアップをGit管理
+cd ~/backups/vyos
+scp vyos:/config/config.boot ./config.boot
+git add config.boot
+git commit -m "backup: $(date +%Y-%m-%d)"
+```
+
+**完了条件**:
+- [ ] `/config/backup/`にバックアップファイルが存在する
+- [ ] task-schedulerで自動バックアップが設定されている
+- [ ] 外部(Mac等)にもバックアップがコピーされている
 
 ---
 
@@ -111,3 +131,44 @@ save
 # 全クライアントに新しい公開鍵を配布
 show wireguard keypairs pubkey rotation-$(date +%Y%m%d)
 ```
+
+**完了条件**:
+- [ ] WireGuard鍵がバックアップされている
+- [ ] バックアップファイルのパーミッションが適切(600)
+
+---
+
+## 災害復旧手順
+
+VyOSが起動しなくなった場合の復旧手順:
+
+### 1. 新規インストール
+1. VyOS ISOからブート
+2. `install image`でクリーンインストール
+3. 再起動
+
+### 2. 設定復元
+```bash
+# バックアップファイルをVyOSに転送
+scp ~/backups/vyos/config-YYYYMMDD.boot vyos@<IP>:/tmp/
+
+# VyOS上で復元
+configure
+load /tmp/config-YYYYMMDD.boot
+commit
+save
+```
+
+### 3. WireGuard鍵復元
+```bash
+# 鍵ファイルを転送
+scp wireguard-keys.tar.gz vyos@<IP>:/tmp/
+
+# VyOS上で展開
+sudo tar -xzf /tmp/wireguard-keys.tar.gz -C /
+```
+
+### 4. 動作確認
+- [ ] SSHログイン可能
+- [ ] IPv6通信可能
+- [ ] WireGuard接続可能

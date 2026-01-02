@@ -156,8 +156,16 @@ PersistentKeepalive = 25
 
 ### クライアント側の鍵生成
 
+**事前生成済みの鍵を使用する場合** (推奨):
+```bash
+# Mac/Linuxで事前生成した鍵
+~/.wireguard/client-private.key  # クライアント設定のPrivateKeyに使用
+~/.wireguard/client-public.key   # VyOS側のpeer登録に使用
+```
+
+**新規生成する場合**:
 - iOS/Android: WireGuardアプリで「鍵ペアを生成」
-- Linux/Mac: `wg genkey | tee privatekey | wg pubkey > publickey`
+- Mac/Linux: `wg genkey | tee privatekey | wg pubkey > publickey`
 - Windows: WireGuardアプリで「空のトンネルを追加」→自動生成
 
 ### スマホからのSSHアクセス（Termius）
@@ -177,8 +185,24 @@ PersistentKeepalive = 25
 ### トラブルシューティング
 
 ```bash
+# WireGuardインターフェース状態
 show interfaces wireguard
+
+# 接続中のpeer一覧
 show wireguard peers
+
+# ログ確認
 show log | grep -i wire
 show log | grep -i drop
+
+# ファイアウォールでブロックされていないか
+show firewall statistics
 ```
+
+### よくある問題
+
+| 症状 | 原因 | 対処 |
+|------|------|------|
+| 接続できない | FWでブロック | rule 30が正しく設定されているか確認 |
+| 接続後pingできない | allowed-ips不一致 | VyOS側とクライアント側の設定を確認 |
+| 一定時間で切断 | NAT越え問題 | PersistentKeepalive を設定(25秒推奨) |
