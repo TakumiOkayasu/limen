@@ -21,7 +21,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ```
 [ONU] ── [LXW-10G5] ─┬─ 10G ── [自作ルーター] ── [LAN]
                      │                │
-                     │           (別セグメント 2.5G)
+                     │           (別セグメント 1G)
                      │                │
                      └─ 10G ── [WXR9300BE6P]
                                (MAP-E専用)
@@ -39,7 +39,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### トラフィックフロー
 
 - **IPv6**: LAN → 自作ルーター → LXW-10G5 → ONU → NGN (10Gbps狙い)
-- **IPv4**: LAN → 自作ルーター → WXR → MAP-Eトンネル (2〜3Gbps期待)
+- **IPv4**: LAN → 自作ルーター → WXR → MAP-Eトンネル (1Gbps上限)
 
 ---
 
