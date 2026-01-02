@@ -10,6 +10,8 @@
       "Bash(python3 -m pytest:*)",
       "Bash(done)",
       "Bash(grep:*)"
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
