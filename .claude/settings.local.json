@@ -3,7 +3,9 @@
     "allow": [
       "WebSearch",
       "WebFetch(domain:docs.vyos.io)",
-      "WebFetch(domain:forum.vyos.io)"
+      "WebFetch(domain:forum.vyos.io)",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:www.amazon.co.jp)"
     ]
   }
 }
