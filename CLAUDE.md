@@ -99,7 +99,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 - [ ] 2-1: RA受信・DHCPv6-PD取得
 - [ ] 2-2: LAN側RA配布設定
-- [ ] 2-3: IPv6ファイアウォール設定（WAN6_IN作成）
+- [ ] 2-3: IPv6ファイアウォール設定 (forward filter)
 
 ### Phase 3: WireGuard VPN
 → [docs/phase3-wireguard.md](docs/phase3-wireguard.md)
@@ -139,3 +139,9 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - ファイアウォールルール番号一覧
 - 環境情報
 - MAP-Eパラメータ（保険用）
+
+---
+
+## トラブルシューティング
+
+- [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - 調査中
