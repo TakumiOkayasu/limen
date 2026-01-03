@@ -27,11 +27,22 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 |------|------|
 | OS | VyOS Rolling Release |
 | 本体 | HP ProDesk 600 G4 SFF |
-| NIC1 | Intel X540-T2 (10GbE x2) - WAN/LAN |
-| NIC2 | RTL8126 (5GbE) - WXR接続用 |
+| NIC1 | Intel X540-T2 Port1 (10GbE) - WAN (enp1s0f0) |
+| NIC2 | Intel X540-T2 Port2 (10GbE) - LAN (enp1s0f1) |
+| NIC3 | RTL8126 (5GbE) - フレキシブル (必要時に接続) |
+| NIC4 | オンボード (1GbE) - WXR接続用 (要確認) |
 | L2スイッチ | BUFFALO LXW-10G5 |
 | ISP | BIGLOBE (IPv6 IPoE + MAP-E) |
 | 既存ルーター | Buffalo WXR9300BE6P |
+
+### WXR接続用別セグメント (192.168.100.x)
+
+自作ルーターとWXR9300BE6Pを1GbEオンボードNICで直結し、IPv4転送専用の別セグメントを構築する。
+
+- 自作ルーター側: 192.168.100.2/24
+- WXR側 (LAN): 192.168.100.1/24 (DHCPサーバー無効)
+- 用途: IPv4トラフィックをWXR経由でMAP-Eに転送
+- 帯域: 1Gbps上限 (IPv4は例外扱いなので問題なし)
 
 ## 実装フェーズ
 

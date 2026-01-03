@@ -11,8 +11,8 @@
       "Bash(done)",
       "Bash(grep:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git-new-feature:*)"
     ]
   }
 }
-
