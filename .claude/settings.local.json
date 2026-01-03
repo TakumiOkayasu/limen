@@ -13,7 +13,13 @@
       "Bash(git pull:*)",
       "Bash(git stash:*)",
       "Bash(git-new-feature:*)",
-      "Bash(git-cleanup-branch:*)"
+      "Bash(git-cleanup-branch:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(gh api:*)",
+      "Bash(git fetch:*)",
+      "WebFetch(domain:maclookup.app)",
+      "WebFetch(domain:www.rtpro.yamaha.co.jp)"
     ]
   }
 }
