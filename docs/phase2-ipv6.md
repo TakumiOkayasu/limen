@@ -8,10 +8,10 @@
 ```
 configure
 
-set interfaces ethernet eth0 description 'WAN'
-set interfaces ethernet eth0 ipv6 address autoconf
-set interfaces ethernet eth0 dhcpv6-options pd 0 length 56
-set interfaces ethernet eth0 dhcpv6-options pd 0 interface eth1 sla-id 1
+set interfaces ethernet eth1 description 'WAN'
+set interfaces ethernet eth1 ipv6 address autoconf
+set interfaces ethernet eth1 dhcpv6-options pd 0 length 56
+set interfaces ethernet eth1 dhcpv6-options pd 0 interface eth2 sla-id 1
 
 commit
 save
@@ -19,8 +19,7 @@ save
 
 **注意点**:
 - WXRがまだ接続されている場合、先にWXRのRA配布を停止しておく
-- インターフェース名: enp1s0f0=WAN、enp1s0f1=LAN (Intel X540-T2)
-- 上記コマンド例の `eth0`, `eth1` は実際のデバイス名に読み替えること
+- インターフェース名: eth1=WAN (10GbE)、eth2=LAN (10GbE)、eth0=WXR接続 (1GbE)
 
 **完了条件**: グローバルIPv6アドレス取得、`show interfaces`で確認
 
@@ -34,8 +33,8 @@ save
 ```
 configure
 
-set service router-advert interface eth1 prefix ::/64
-set service router-advert interface eth1 name-server <IPv6 DNS>
+set service router-advert interface eth2 prefix ::/64
+set service router-advert interface eth2 name-server <IPv6 DNS>
 
 commit
 save
@@ -85,8 +84,8 @@ set firewall ipv6 name WAN6_IN rule 24 action accept
 set firewall ipv6 name WAN6_IN rule 24 protocol icmpv6
 set firewall ipv6 name WAN6_IN rule 24 icmpv6 type router-advertisement
 
-# インターフェースに適用
-set interfaces ethernet eth0 firewall in ipv6-name WAN6_IN
+# インターフェースに適用 (eth1=WAN)
+set interfaces ethernet eth1 firewall in ipv6-name WAN6_IN
 
 commit
 save

@@ -6,11 +6,11 @@
 
 **物理構成**:
 ```
-[ONU] ─────┬─ [LXW-10G5] ─┬─ 10G ── [自作ルーター eth0(WAN)]
+[ONU] ─────┬─ [LXW-10G5] ─┬─ 10G ── [自作ルーター eth1(WAN)]
            │              │                    │
-           │              │              [eth1(LAN)] ── [LAN機器]
+           │              │              [eth2(LAN)] ── [LAN機器]
            │              │                    │
-           │              │              [eth2] ── (4-3で使用)
+           │              │              [eth0] ── (4-3で使用、WXR接続)
            │              │
            └──────────────┴─ 10G ── [WXR9300BE6P 10Gポート(WAN)]
 ```
@@ -19,13 +19,13 @@
 | ポート | 接続先 | 備考 |
 |--------|--------|------|
 | 1 | ONU | 10GbE |
-| 2 | 自作ルーター eth0 | 10GbE (WAN) |
+| 2 | 自作ルーター eth1 | 10GbE (WAN) |
 | 3 | WXR 10Gポート | 10GbE (MAP-E WAN) |
 | 4-5 | 予備 | - |
 
 **手順**:
 1. LXW-10G5ポート1をONUに接続
-2. 自作ルーターWANポート(eth0)をLXW-10G5ポート2に接続
+2. 自作ルーターWANポート(eth1)をLXW-10G5ポート2に接続
 3. WXR 10GポートをLXW-10G5ポート3に接続
 
 **注意点**:
@@ -93,8 +93,8 @@
 ```
 configure
 
-set interfaces ethernet eth2 description 'To WXR LAN (IPv4 transit)'
-set interfaces ethernet eth2 address 192.168.100.2/24
+set interfaces ethernet eth0 description 'To WXR LAN (IPv4 transit)'
+set interfaces ethernet eth0 address 192.168.100.2/24
 
 commit
 save
@@ -115,7 +115,7 @@ ping 192.168.100.1
 
 **完了条件**:
 - [ ] 自作ルーター(192.168.100.2) → WXR(192.168.100.1) ping成功
-- [ ] eth2が正しく認識されている(`show interfaces`)
+- [ ] eth0が正しく認識されている(`show interfaces`)
 
 ---
 
@@ -154,10 +154,10 @@ LAN側クライアントがIPv4でインターネットに出られるように�
 configure
 
 # LAN側インターフェースのIPv4アドレス設定
-set interfaces ethernet eth1 address 192.168.1.1/24
+set interfaces ethernet eth2 address 192.168.1.1/24
 
 # LAN → WXR方向のNAT(マスカレード)
-set nat source rule 100 outbound-interface name eth2
+set nat source rule 100 outbound-interface name eth0
 set nat source rule 100 source address 192.168.1.0/24
 set nat source rule 100 translation address masquerade
 

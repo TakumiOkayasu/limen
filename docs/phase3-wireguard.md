@@ -102,9 +102,9 @@ set firewall ipv6 name VPN6_TO_LAN rule 10 action accept
 set firewall ipv6 name VPN6_TO_LAN rule 10 destination address fd00:vpn::1
 set firewall ipv6 name VPN6_TO_LAN rule 10 description 'Allow access to VyOS only'
 
-# wg0からeth1(LAN)への転送を制限
-set interfaces ethernet eth1 firewall in name VPN_TO_LAN
-set interfaces ethernet eth1 firewall in ipv6-name VPN6_TO_LAN
+# wg0からeth2(LAN)への転送を制限
+set interfaces ethernet eth2 firewall in name VPN_TO_LAN
+set interfaces ethernet eth2 firewall in ipv6-name VPN6_TO_LAN
 
 # VPN → WAN 禁止 (踏み台防止)
 set firewall ipv4 name VPN_TO_WAN default-action drop
@@ -115,9 +115,9 @@ set firewall ipv6 name VPN6_TO_WAN default-action drop
 set firewall ipv6 name VPN6_TO_WAN rule 1 action drop
 set firewall ipv6 name VPN6_TO_WAN rule 1 description 'Block VPN to Internet'
 
-# wg0からeth0(WAN)への転送を禁止
-set interfaces ethernet eth0 firewall in name VPN_TO_WAN
-set interfaces ethernet eth0 firewall in ipv6-name VPN6_TO_WAN
+# wg0からeth1(WAN)への転送を禁止
+set interfaces ethernet eth1 firewall in name VPN_TO_WAN
+set interfaces ethernet eth1 firewall in ipv6-name VPN6_TO_WAN
 
 commit
 save

@@ -20,10 +20,10 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ```
 [ONU] ── [LXW-10G5] ─┬─ 10G ── [自作ルーター] ── [LAN]
-                     │         (enp1s0f0)    (enp1s0f1)
+                     │           (eth1)         (eth2)
                      │                │
                      │           (別セグメント 1G)
-                     │           (オンボードNIC)
+                     │              (eth0)
                      │                │
                      └─ 10G ── [WXR9300BE6P]
                                (MAP-E専用)
@@ -33,12 +33,12 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ### NIC構成
 
-| NIC | デバイス名 | 速度 | 用途 |
-|-----|-----------|------|------|
-| Intel X540-T2 Port1 | enp1s0f0 | 10GbE | WAN (LXW-10G5経由でONU) |
-| Intel X540-T2 Port2 | enp1s0f1 | 10GbE | LAN (主要機器向け) |
-| RTL8126 | (未使用) | 5GbE | フレキシブル (必要時に接続) |
-| オンボード | (要確認) | 1GbE | WXR接続 (別セグメント 192.168.100.x) |
+| VyOS名 | NIC | 速度 | 用途 |
+|--------|-----|------|------|
+| eth0 | オンボード | 1GbE | WXR接続 (別セグメント 192.168.100.x) |
+| eth1 | Intel X540-T2 Port2 | 10GbE | WAN (LXW-10G5経由でONU) |
+| eth2 | Intel X540-T2 Port1 | 10GbE | LAN (主要機器向け) |
+| (未使用) | RTL8126 | 5GbE | フレキシブル (必要時に接続) |
 
 ### WXR接続用別セグメント (192.168.100.x)
 
@@ -60,6 +60,22 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 - **IPv6**: LAN → 自作ルーター → LXW-10G5 → ONU → NGN (10Gbps狙い)
 - **IPv4**: LAN → 自作ルーター → WXR → MAP-Eトンネル (1Gbps上限)
+
+---
+
+## コマンド指示のルール
+
+**重要**: コマンドを指示する際は、必ず実行先を明示すること。
+
+- **[Mac]** - Macのターミナルで実行
+- **[VyOS]** - VyOSのコンソール/SSHで実行
+- **[WXR]** - WXR管理画面で操作
+
+例:
+```
+[VyOS] show interfaces
+[Mac] ping 192.168.1.1
+```
 
 ---
 

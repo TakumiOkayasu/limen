@@ -27,10 +27,10 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 |------|------|
 | OS | VyOS Rolling Release |
 | 本体 | HP ProDesk 600 G4 SFF |
-| NIC1 | Intel X540-T2 Port1 (10GbE) - WAN (enp1s0f0) |
-| NIC2 | Intel X540-T2 Port2 (10GbE) - LAN (enp1s0f1) |
-| NIC3 | RTL8126 (5GbE) - フレキシブル (必要時に接続) |
-| NIC4 | オンボード (1GbE) - WXR接続用 (要確認) |
+| eth0 | オンボード (1GbE) - WXR接続用 |
+| eth1 | Intel X540-T2 Port2 (10GbE) - WAN |
+| eth2 | Intel X540-T2 Port1 (10GbE) - LAN |
+| (未使用) | RTL8126 (5GbE) - フレキシブル |
 | L2スイッチ | BUFFALO LXW-10G5 |
 | ISP | BIGLOBE (IPv6 IPoE + MAP-E) |
 | 既存ルーター | Buffalo WXR9300BE6P |

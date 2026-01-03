@@ -17,14 +17,14 @@ ntp_servers:
 # VyOSインストール後に `show interfaces` で実際の名前を確認
 #
 # 確定したNIC構成:
-#   - Intel X540-T2 Port1 (enp1s0f0): WAN (10GbE)
-#   - Intel X540-T2 Port2 (enp1s0f1): LAN (10GbE)
+#   - eth0: オンボード 1GbE - WXR接続用 (別セグメント 192.168.100.x)
+#   - eth1: Intel X540-T2 Port2 (10GbE) - WAN
+#   - eth2: Intel X540-T2 Port1 (10GbE) - LAN
 #   - RTL8126 (5GbE): フレキシブル用途 (VyOS設定に含めない)
-#   - オンボード 1GbE (要確認): WXR接続用 (別セグメント 192.168.100.x)
 #
-wan_interface: "enp1s0f0"   # WAN側 (LXW-10G5へ、10GbE Intel X540-T2 Port1)
-lan_interface: "enp1s0f1"   # LAN側 (10GbE Intel X540-T2 Port2)
-wxr_interface: "eno1"       # WXR接続用 (1GbE オンボード、要確認)
+wan_interface: "eth1"   # WAN側 (LXW-10G5へ、10GbE Intel X540-T2 Port2)
+lan_interface: "eth2"   # LAN側 (10GbE Intel X540-T2 Port1)
+wxr_interface: "eth0"   # WXR接続用 (1GbE オンボード)
 
 # LAN設定
 lan_ipv4: "192.168.1.1/24"
