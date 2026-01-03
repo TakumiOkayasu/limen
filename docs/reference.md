@@ -68,16 +68,18 @@ set protocols static route <target>/32 next-hop 192.168.100.1
 
 **追加NIC 1**: Intel X540-T2 (10GbE, PCIe x8) → PCIe x16スロット
 - ポート数: 2
-- eth0: WAN (LXW-10G5へ)
-- eth1: LAN
+- Port1 (enp1s0f0): WAN (LXW-10G5へ)
+- Port2 (enp1s0f1): LAN
 
 **追加NIC 2**: Binardat RTL8126 (5GbE, PCIe x1) → PCIe x1スロット
-- eth2: WXR接続用 (IPv4転送)
+- フレキシブル用途 (Mac/Proxmox等、必要時に接続)
+- VyOS設定には含めない
 - 対応速度: 5G/2.5G/1G/100Mbps
 - ロープロファイル対応
 
 **内蔵NIC**: Intel I219-LM (1GbE)
-- 未使用 (予備)
+- WXR接続用 (IPv4転送、別セグメント 192.168.100.x)
+- デバイス名: 要確認 (VyOSインストール後に `show interfaces` で確認)
 
 ### ネットワーク機器
 
@@ -102,14 +104,24 @@ VyOSインストール後、実際のインターフェース名を確認:
 show interfaces
 ```
 
-**想定される対応表**:
-| 想定名 | 実際の名前(要確認) | 用途 |
-|--------|-------------------|------|
-| eth0 | enp?s?f? | WAN (10GbE, Intel X540-T2) |
-| eth1 | enp?s?f? | LAN (10GbE, Intel X540-T2) |
-| eth2 | enp?s?f? | WXR接続 (5GbE, RTL8126) |
+**確定したインターフェース対応表**:
+| NIC | デバイス名 | 速度 | 用途 |
+|-----|-----------|------|------|
+| Intel X540-T2 Port1 | enp1s0f0 | 10GbE | WAN (LXW-10G5経由でONU) |
+| Intel X540-T2 Port2 | enp1s0f1 | 10GbE | LAN (主要機器向け) |
+| RTL8126 | (未使用) | 5GbE | フレキシブル (必要時に接続) |
+| オンボード | (要確認) | 1GbE | WXR接続 (別セグメント 192.168.100.x) |
 
-**注意**: 実際のインターフェース名はハードウェア構成により異なる。VyOSはPredictable Network Interface Names(enp*形式)を使用する可能性あり。
+**注意**: オンボードNICのデバイス名はVyOSインストール後に `show interfaces` で確認すること。
+
+### WXR接続用別セグメント (192.168.100.x)
+
+自作ルーターとWXR9300BE6Pを1GbEオンボードNICで直結し、IPv4転送専用の別セグメントを構築する。
+
+- 自作ルーター側: 192.168.100.2/24
+- WXR側 (LAN): 192.168.100.1/24 (DHCPサーバー無効)
+- 用途: IPv4トラフィックをWXR経由でMAP-Eに転送
+- 帯域: 1Gbps上限 (IPv4は例外扱いなので問題なし)
 
 ### 速度目標
 

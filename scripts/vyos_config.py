@@ -39,9 +39,10 @@ class Config:
     ntp_servers: tuple = ("ntp.nict.jp", "time.cloudflare.com")
 
     # インターフェース名
-    wan_interface: str = "eth0"
-    lan_interface: str = "eth1"
-    wxr_interface: str = "eth2"
+    # Intel X540-T2 Port1/Port2, オンボード1GbE
+    wan_interface: str = "enp1s0f0"  # WAN (10GbE)
+    lan_interface: str = "enp1s0f1"  # LAN (10GbE)
+    wxr_interface: str = "eno1"      # WXR接続 (1GbE オンボード、要確認)
 
     # LAN設定
     lan_ipv4: str = "192.168.1.1/24"
