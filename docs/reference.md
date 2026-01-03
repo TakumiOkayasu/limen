@@ -44,15 +44,23 @@ set protocols static route <target>/32 next-hop 192.168.100.1
 
 ## ファイアウォールルール番号一覧
 
-### WAN6_IN（eth0 inbound）
+### IPv6 forward filter (eth1 inbound)
+
+VyOS 2024.x以降の新構文: `firewall ipv6 forward filter`
 
 | ルール# | 用途 | 設定タスク |
 |---------|------|------------|
 | 10 | established/related許可 | 2-3 |
-| 20-24 | ICMPv6（必須タイプのみ） | 2-3 |
+| 20 | echo-request許可 | 2-3 |
+| 21 | nd-neighbor-solicit許可 | 2-3 |
+| 22 | nd-neighbor-advert許可 | 2-3 |
+| 23 | nd-router-solicit許可 | 2-3 |
+| 24 | nd-router-advert許可 | 2-3 |
 | 25 | WireGuard rate limit | 3-2 |
 | 30 | WireGuard許可 | 3-2 |
-| default | drop + log | 2-3, 5-2 |
+| default | drop | 2-3 |
+
+**注意**: 各ルールに `inbound-interface name eth1` を指定
 
 ---
 
