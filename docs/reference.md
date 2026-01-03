@@ -105,14 +105,13 @@ show interfaces
 ```
 
 **確定したインターフェース対応表**:
-| NIC | デバイス名 | 速度 | 用途 |
-|-----|-----------|------|------|
-| Intel X540-T2 Port1 | enp1s0f0 | 10GbE | WAN (LXW-10G5経由でONU) |
-| Intel X540-T2 Port2 | enp1s0f1 | 10GbE | LAN (主要機器向け) |
-| RTL8126 | (未使用) | 5GbE | フレキシブル (必要時に接続) |
-| オンボード | (要確認) | 1GbE | WXR接続 (別セグメント 192.168.100.x) |
+| VyOS名 | altname | MAC | NIC | 速度 | 用途 |
+|--------|---------|-----|-----|------|------|
+| eth0 | - | f4:39:09:1f:ef:aa | オンボード | 1GbE | WXR接続 (別セグメント 192.168.100.x) |
+| eth1 | enp1s0f1 | c4:62:37:08:0e:53 | Intel X540-T2 Port2 | 10GbE | WAN (LXW-10G5経由でONU) |
+| eth2 | enp1s0f0 | c4:62:37:08:0e:52 | Intel X540-T2 Port1 | 10GbE | LAN (主要機器向け) |
 
-**注意**: オンボードNICのデバイス名はVyOSインストール後に `show interfaces` で確認すること。
+**注意**: VyOSでは `eth0`, `eth1`, `eth2` という命名になる。`show interfaces ethernet ethX` で `altname` を確認可能。
 
 ### WXR接続用別セグメント (192.168.100.x)
 

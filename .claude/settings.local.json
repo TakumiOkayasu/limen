@@ -12,7 +12,8 @@
       "Bash(grep:*)",
       "Bash(git pull:*)",
       "Bash(git stash:*)",
-      "Bash(git-new-feature:*)"
+      "Bash(git-new-feature:*)",
+      "Bash(git-cleanup-branch:*)"
     ]
   }
 }
