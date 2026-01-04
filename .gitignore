@@ -23,3 +23,8 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+# ビルド成果物
+packages/
+realtek-r8126-dkms/
+vyos-build/
