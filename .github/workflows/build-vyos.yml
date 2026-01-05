@@ -1,0 +1,82 @@
+name: Build Custom VyOS ISO
+
+on:
+  workflow_dispatch:
+    inputs:
+      vyos_version:
+        description: "VyOS branch to build"
+        required: true
+        default: "current"
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          df -h
+
+      - name: Clone vyos-build
+        run: |
+          git clone -b ${{ github.event.inputs.vyos_version }} --single-branch https://github.com/vyos/vyos-build.git
+
+      - name: Patch kernel config (disable MODULE_SIG_FORCE)
+        run: |
+          cd vyos-build/scripts/package-build/linux-kernel
+          sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/' arch/x86/configs/vyos_defconfig
+          echo "Patched kernel config:"
+          grep MODULE_SIG_FORCE arch/x86/configs/vyos_defconfig
+
+      - name: Build kernel in Docker
+        run: |
+          cd vyos-build
+          docker run --rm --privileged \
+            -v $(pwd):/vyos \
+            -w /vyos/scripts/package-build/linux-kernel \
+            vyos/vyos-build:current \
+            bash -c "
+              apt-get update && apt-get install -y curl
+              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.117.tar.gz
+              tar xzf linux-6.6.117.tar.gz
+              mv linux-6.6.117 linux
+              apt-get install -y flex bison bc libssl-dev libelf-dev libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev python3 zstd pahole perl
+              ./build-kernel.sh
+            "
+
+      - name: Copy kernel packages
+        run: |
+          mkdir -p vyos-build/packages
+          cp vyos-build/scripts/package-build/linux-kernel/*.deb vyos-build/packages/ || true
+          ls -la vyos-build/packages/
+
+      - name: Build VyOS ISO
+        run: |
+          cd vyos-build
+          docker run --rm --privileged \
+            -v $(pwd):/vyos \
+            -w /vyos \
+            vyos/vyos-build:current \
+            sudo ./build-vyos-image --architecture amd64 --build-by "github-actions" generic
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: vyos-custom-iso
+          path: vyos-build/build/*.iso
+          retention-days: 7
+
+      - name: Upload kernel packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-packages
+          path: vyos-build/packages/*.deb
+          retention-days: 7
