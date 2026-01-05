@@ -68,14 +68,14 @@ jobs:
             sudo ./build-vyos-image --architecture amd64 --build-by "github-actions" generic
 
       - name: Upload ISO
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vyos-custom-iso
           path: vyos-build/build/*.iso
           retention-days: 7
 
       - name: Upload kernel packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: kernel-packages
           path: vyos-build/packages/*.deb
