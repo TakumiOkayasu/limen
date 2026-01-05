@@ -145,3 +145,22 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ## トラブルシューティング
 
 - [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - 調査中
+
+---
+
+## VyOS環境の制約・注意事項
+
+以下は実際に試行して判明した制約。同じ失敗を繰り返さないこと。
+
+### 使えないコマンド
+
+| コマンド | 代替手段 |
+|----------|----------|
+| `xxd` | `od -A x -t x1z` または `hexdump -C` |
+
+### DHCPv6-PD (wide-dhcpv6-client) 関連
+
+- **DUIDファイル形式**: `/var/lib/dhcpv6/dhcp6c_duid` は先頭2バイトがリトルエンディアンの長さ
+  - 例: 10バイトのDUIDなら `\x0a\x00` + DUID本体
+- **DUID-LL形式**: `00:03:00:01:MAC` (NTT NGNはこの形式が必須)
+- **設定ファイルの`send client-id`**: DUIDファイルより優先されるため、DUIDファイルを使う場合は`send client-id`行を削除した設定ファイルを使用
