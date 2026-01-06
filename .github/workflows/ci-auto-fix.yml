@@ -21,42 +21,55 @@ jobs:
         run: |
           gh run view ${{ github.event.workflow_run.id }} --log-failed > /tmp/failed_logs.txt 2>&1 || true
           tail -100 /tmp/failed_logs.txt > /tmp/error_summary.txt
-          echo "error_log<<EOF" >> $GITHUB_OUTPUT
-          cat /tmp/error_summary.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Analyze with Claude API
         id: analyze
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # エラーログを読み込み
-          ERROR_LOG=$(cat /tmp/error_summary.txt)
+          # エラーログとワークフローファイルをBase64エンコード
+          ERROR_LOG_B64=$(base64 -w0 /tmp/error_summary.txt)
+          WORKFLOW_B64=$(base64 -w0 .github/workflows/build-vyos.yml)
 
-          # ワークフローファイルを読み込み
-          WORKFLOW_CONTENT=$(cat .github/workflows/build-vyos.yml)
+          # プロンプトを作成
+          PROMPT="GitHub Actions CIが失敗しました。エラーログと現在のワークフローファイルを分析し、修正が必要な場合は修正後のファイル内容を出力してください。
+
+          エラーログ (Base64): ${ERROR_LOG_B64}
+          ワークフローファイル (Base64): ${WORKFLOW_B64}
+
+          Base64をデコードして内容を確認してください。
+
+          出力形式:
+          修正が必要な場合は、以下の形式で出力してください:
+
+          ---FIX_START---
+          ファイルパス: .github/workflows/build-vyos.yml
+          ---CONTENT_START---
+          (修正後のファイル内容全体)
+          ---CONTENT_END---
+          ---FIX_END---
+
+          修正が不要な場合や、ワークフローファイル以外の問題の場合は:
+          ---NO_FIX---
+          理由: (修正が不要な理由)
+          ---END---"
+
+          # JSONペイロードを作成
+          jq -n --arg prompt "$PROMPT" '{
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 4096,
+            messages: [{role: "user", content: $prompt}]
+          }' > /tmp/payload.json
 
           # Claude APIに送信
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+          curl -s https://api.anthropic.com/v1/messages \
             -H "Content-Type: application/json" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
-            -d @- <<PAYLOAD
-          {
-            "model": "claude-sonnet-4-20250514",
-            "max_tokens": 4096,
-            "messages": [
-              {
-                "role": "user",
-                "content": "GitHub Actions CIが失敗しました。エラーログと現在のワークフローファイルを分析し、修正が必要な場合は修正後のファイル内容を出力してください。\n\n## エラーログ (最後の100行)\n\`\`\`\n${ERROR_LOG}\n\`\`\`\n\n## 現在のワークフローファイル (.github/workflows/build-vyos.yml)\n\`\`\`yaml\n${WORKFLOW_CONTENT}\n\`\`\`\n\n## 出力形式\n修正が必要な場合は、以下の形式で出力してください:\n\n---FIX_START---\nファイルパス: .github/workflows/build-vyos.yml\n---CONTENT_START---\n(修正後のファイル内容全体)\n---CONTENT_END---\n---FIX_END---\n\n修正が不要な場合や、ワークフローファイル以外の問題の場合は:\n---NO_FIX---\n理由: (修正が不要な理由)\n---END---"
-              }
-            ]
-          }
-PAYLOAD
-          )
+            -d @/tmp/payload.json > /tmp/response.json
 
           # レスポンスからテキストを抽出
-          echo "$RESPONSE" | jq -r '.content[0].text' > /tmp/claude_response.txt
+          jq -r '.content[0].text // "API Error: " + (.error.message // "Unknown error")' /tmp/response.json > /tmp/claude_response.txt
           cat /tmp/claude_response.txt
 
       - name: Apply fix if needed
