@@ -734,6 +734,101 @@ WXRのMAC + DUID-LLでも応答がないということは:
 
 **結論: ONU再起動が必要**
 
+## 解決 (2026-01-06)
+
+### 解決手順
+
+ONU再起動後、以下の手順で解決:
+
+#### 1. 問題の切り分け (困難は分割せよ)
+
+| # | 確認項目 | 結果 |
+|---|----------|------|
+| 1 | L1: 物理リンク | OK (`show interfaces` で u/u) |
+| 2 | L2: MACレベル通信 | OK (RA受信できている) |
+| 3 | L3: リンクローカル通信 | OK (ndisc6でNA応答あり) |
+| 4 | DHCPv6: DUID形式 | **NG** (DUID-UUID形式だった) |
+
+**補足**: ping6が100% lossだったのはNGN側でICMPv6 Echo Replyを無効化しているため (NA応答は返ってくる)
+
+#### 2. DUIDファイルの修正
+
+```bash
+# DHCPv6クライアント停止
+sudo systemctl stop dhcp6c@eth1 2>/dev/null || true
+
+# DUID-LL形式でファイル作成
+printf '\x0a\x00\x00\x03\x00\x01\xc4\x62\x37\x08\x0e\x53' | sudo tee /var/lib/dhcpv6/dhcp6c_duid > /dev/null
+
+# 確認
+od -A x -t x1z /var/lib/dhcpv6/dhcp6c_duid
+# 出力: 0a 00 00 03 00 01 c4 62 37 08 0e 53
+```
+
+**ファイル形式の説明**:
+- `0a 00` = 長さ (10バイト、リトルエンディアン)
+- `00 03` = DUID-LL type
+- `00 01` = Ethernet hardware type
+- `c4 62 37 08 0e 53` = eth1のMACアドレス
+
+#### 3. DHCPv6クライアント再起動
+
+```bash
+sudo systemctl restart dhcp6c@eth1
+```
+
+#### 4. 結果確認
+
+```
+$ sudo tcpdump -i eth1 -n port 546 or port 547 -c 4
+dhcp6 solicit
+dhcp6 advertise
+dhcp6 request
+dhcp6 reply
+```
+
+```
+$ show interfaces
+eth2: 2404:7a82:4d02:4101:c662:37ff:fe08:e52/64
+```
+
+```
+$ ping6 -c 3 2001:4860:4860::8888
+3 packets transmitted, 3 received, 0% packet loss
+```
+
+### 根本原因
+
+**DUIDがDUID-LL形式でなかった**
+
+| 形式 | プレフィックス | NGN対応 |
+|------|----------------|---------|
+| DUID-LLT | `00:01:...` | NG |
+| DUID-EN | `00:02:...` | NG |
+| DUID-LL | `00:03:...` | **OK** |
+| DUID-UUID | `00:04:...` | NG |
+
+NTT NGN (フレッツ網) はDUID-LL形式のみを受け付け、それ以外のDHCPv6 Solicitは**黙って無視する**。
+
+VyOSのwide-dhcpv6-clientはデフォルトでDUID-UUID (`00:04:...`) を生成するため、手動でDUID-LLファイルを作成する必要があった。
+
+### 永続化設定
+
+VyOS設定に以下を追加して永続化:
+
+```
+configure
+set interfaces ethernet eth1 dhcpv6-options duid '00:03:00:01:c4:62:37:08:0e:53'
+commit
+save
+```
+
+### 教訓
+
+1. **NGNのDHCPv6-PDはDUID-LL必須** - 他の形式は黙って無視される
+2. **ping6が通らなくてもL3は正常な場合がある** - NDPのNA応答で確認すべき
+3. **問題は分割して切り分ける** - L1→L2→L3→アプリケーション層の順に確認
+
 ## ステータス
 
-**未解決** - ONU再起動 + 正しいDUID-LLで再試行が必要
+**解決済み** (2026-01-06)
