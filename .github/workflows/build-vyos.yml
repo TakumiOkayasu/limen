@@ -1,4 +1,4 @@
-name: Build Custom VyOS ISO
+name: Build VyOS Kernel with r8126 Module
 
 on:
   workflow_dispatch:
@@ -7,6 +7,11 @@ on:
         description: "VyOS branch to build"
         required: true
         default: "current"
+        type: string
+      kernel_version:
+        description: "Kernel version (e.g., 6.6.117)"
+        required: true
+        default: "6.6.117"
         type: string
 
 jobs:
@@ -23,60 +28,94 @@ jobs:
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
           df -h
 
       - name: Clone vyos-build
         run: |
           git clone -b ${{ github.event.inputs.vyos_version }} --single-branch https://github.com/vyos/vyos-build.git
 
-      - name: Patch kernel config (disable MODULE_SIG_FORCE)
-        run: |
-          cd vyos-build/scripts/package-build/linux-kernel
-          sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/' arch/x86/configs/vyos_defconfig
-          echo "Patched kernel config:"
-          grep MODULE_SIG_FORCE arch/x86/configs/vyos_defconfig
-
-      - name: Build kernel in Docker
-        run: |
-          cd vyos-build
-          docker run --rm --privileged \
-            -v $(pwd):/vyos \
-            -w /vyos/scripts/package-build/linux-kernel \
-            vyos/vyos-build:current \
-            bash -c "
-              sudo apt-get update && sudo apt-get install -y curl
-              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.117.tar.gz
-              tar xzf linux-6.6.117.tar.gz
-              mv linux-6.6.117 linux
-              sudo apt-get install -y flex bison bc libssl-dev libelf-dev libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev python3 python-is-python3 zstd pahole perl libdw-dev libdebuginfod-dev systemtap-sdt-dev libunwind-dev libslang2-dev libperl-dev
-              ./build-kernel.sh
-            "
-
-      - name: Copy kernel packages
-        run: |
-          mkdir -p vyos-build/packages
-          cp vyos-build/scripts/package-build/linux-kernel/*.deb vyos-build/packages/ || true
-          ls -la vyos-build/packages/
-
-      - name: Build VyOS ISO
+      - name: Build kernel and r8126 module
         run: |
           cd vyos-build
           docker run --rm --privileged \
             -v $(pwd):/vyos \
             -w /vyos \
-            vyos/vyos-build:current \
-            sudo ./build-vyos-image --architecture amd64 --build-by "github-actions" generic
+            -e KERNEL_VERSION=${{ github.event.inputs.kernel_version }} \
+            vyos/vyos-build:${{ github.event.inputs.vyos_version }} \
+            bash -c '
+              set -e
 
-      - name: Upload ISO
-        uses: actions/upload-artifact@v6
-        with:
-          name: vyos-custom-iso
-          path: vyos-build/build/*.iso
-          retention-days: 7
+              echo "=== Building VyOS kernel ${KERNEL_VERSION} with MODULE_SIG_FORCE=n ==="
+
+              cd /vyos/scripts/package-build/linux-kernel
+
+              # Install dependencies
+              sudo apt-get update
+              sudo apt-get install -y curl flex bison bc libssl-dev libelf-dev libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev
+
+              # Download kernel source
+              MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
+              echo "Downloading kernel ${KERNEL_VERSION}..."
+              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
+              tar xf linux-${KERNEL_VERSION}.tar.xz
+              mv linux-${KERNEL_VERSION} linux
+              cd linux
+
+              # Apply VyOS kernel config
+              cp ../arch/x86/configs/vyos_defconfig arch/x86/configs/
+
+              # Disable MODULE_SIG_FORCE (allow unsigned modules)
+              echo "Patching kernel config to disable MODULE_SIG_FORCE..."
+              sed -i "s/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/" arch/x86/configs/vyos_defconfig
+
+              # Apply config
+              make vyos_defconfig
+
+              # Verify the change
+              echo "Kernel config MODULE_SIG settings:"
+              grep -E "MODULE_SIG" .config || true
+
+              # Build kernel and create deb packages
+              echo "Building kernel packages..."
+              make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
+
+              # Move deb packages to output
+              mkdir -p /vyos/output
+              mv /vyos/scripts/package-build/linux-kernel/*.deb /vyos/output/ || true
+
+              # Build r8126 driver
+              echo "=== Building r8126 driver ==="
+              cd /tmp
+              curl -L -o r8126.tar.bz2 https://github.com/openwrt/rtl8126/releases/download/10.016.00/r8126-10.016.00.tar.bz2
+              tar xjf r8126.tar.bz2
+              cd r8126-10.016.00/src
+
+              # Build r8126 module
+              echo "Building r8126 module..."
+              make -C /vyos/scripts/package-build/linux-kernel/linux M=$(pwd) modules
+
+              # Copy module
+              cp r8126.ko /vyos/output/
+
+              # Show module info
+              echo "=== r8126 module info ==="
+              modinfo r8126.ko
+
+              echo "=== Build completed ==="
+              ls -la /vyos/output/
+            '
 
       - name: Upload kernel packages
         uses: actions/upload-artifact@v6
         with:
-          name: kernel-packages
-          path: vyos-build/packages/*.deb
-          retention-days: 7
+          name: vyos-kernel-packages
+          path: vyos-build/output/*.deb
+          retention-days: 30
+
+      - name: Upload r8126 module
+        uses: actions/upload-artifact@v6
+        with:
+          name: r8126-module
+          path: vyos-build/output/r8126.ko
+          retention-days: 30
