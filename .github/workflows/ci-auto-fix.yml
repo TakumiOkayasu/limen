@@ -1,0 +1,107 @@
+name: CI Auto Fix
+
+on:
+  workflow_run:
+    workflows: ["Build Custom VyOS ISO"]
+    types: [completed]
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get failed workflow logs
+        id: get-logs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run view ${{ github.event.workflow_run.id }} --log-failed > /tmp/failed_logs.txt 2>&1 || true
+          tail -100 /tmp/failed_logs.txt > /tmp/error_summary.txt
+          echo "error_log<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/error_summary.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Analyze with Claude API
+        id: analyze
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # エラーログを読み込み
+          ERROR_LOG=$(cat /tmp/error_summary.txt)
+
+          # ワークフローファイルを読み込み
+          WORKFLOW_CONTENT=$(cat .github/workflows/build-vyos.yml)
+
+          # Claude APIに送信
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d @- <<PAYLOAD
+          {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 4096,
+            "messages": [
+              {
+                "role": "user",
+                "content": "GitHub Actions CIが失敗しました。エラーログと現在のワークフローファイルを分析し、修正が必要な場合は修正後のファイル内容を出力してください。\n\n## エラーログ (最後の100行)\n\`\`\`\n${ERROR_LOG}\n\`\`\`\n\n## 現在のワークフローファイル (.github/workflows/build-vyos.yml)\n\`\`\`yaml\n${WORKFLOW_CONTENT}\n\`\`\`\n\n## 出力形式\n修正が必要な場合は、以下の形式で出力してください:\n\n---FIX_START---\nファイルパス: .github/workflows/build-vyos.yml\n---CONTENT_START---\n(修正後のファイル内容全体)\n---CONTENT_END---\n---FIX_END---\n\n修正が不要な場合や、ワークフローファイル以外の問題の場合は:\n---NO_FIX---\n理由: (修正が不要な理由)\n---END---"
+              }
+            ]
+          }
+PAYLOAD
+          )
+
+          # レスポンスからテキストを抽出
+          echo "$RESPONSE" | jq -r '.content[0].text' > /tmp/claude_response.txt
+          cat /tmp/claude_response.txt
+
+      - name: Apply fix if needed
+        id: apply-fix
+        run: |
+          RESPONSE=$(cat /tmp/claude_response.txt)
+
+          if echo "$RESPONSE" | grep -q "---FIX_START---"; then
+            echo "Fix detected, applying..."
+
+            # ファイルパスを抽出
+            FILE_PATH=$(echo "$RESPONSE" | sed -n 's/ファイルパス: \(.*\)/\1/p' | tr -d ' ')
+
+            # 修正内容を抽出
+            echo "$RESPONSE" | sed -n '/---CONTENT_START---/,/---CONTENT_END---/p' | \
+              sed '1d;$d' > /tmp/fixed_content.txt
+
+            # ファイルを更新
+            cp /tmp/fixed_content.txt "$FILE_PATH"
+
+            echo "has_fix=true" >> $GITHUB_OUTPUT
+            echo "Fixed: $FILE_PATH"
+          else
+            echo "No fix needed or not a workflow issue"
+            echo "$RESPONSE" | grep -A5 "---NO_FIX---" || true
+            echo "has_fix=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.apply-fix.outputs.has_fix == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "fix(ci): auto-fix CI failure"
+          title: "fix(ci): Auto-fix CI failure from workflow run #${{ github.event.workflow_run.id }}"
+          body: |
+            ## Summary
+            This PR was automatically generated to fix a CI failure.
+
+            **Failed workflow run:** #${{ github.event.workflow_run.id }}
+
+            ## Analysis
+            See Claude's analysis in the workflow logs.
+
+            ---
+            🤖 Generated with Claude API
+          branch: fix/ci-auto-${{ github.event.workflow_run.id }}
+          delete-branch: true
