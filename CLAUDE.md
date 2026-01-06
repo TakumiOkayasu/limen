@@ -84,22 +84,28 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### Phase 0: VyOSインストール・基本設定
 → [docs/phase0-install.md](docs/phase0-install.md)
 
-- [ ] 0-1: VyOSインストール
-- [ ] 0-2: タイムゾーン・NTP設定
-- [ ] 0-3: 管理者パスワード変更
+- [x] 0-1: VyOSインストール (2025-12-31完了)
+- [x] 0-2: タイムゾーン・NTP設定 (Asia/Tokyo, ntp.nict.jp等)
+- [x] 0-3: 管理者パスワード変更
 
 ### Phase 1: LAN側SSH有効化
 → [docs/phase1-ssh.md](docs/phase1-ssh.md)
 
-- [ ] 1-1: SSH有効化（LAN側のみ）
-- [ ] 1-2: SSH公開鍵登録（TouchID連携）
+- [x] 1-1: SSH有効化（LAN側 192.168.1.1 のみ）
+- [x] 1-2: SSH公開鍵登録（ed25519, パスワード認証無効）
 
 ### Phase 2: IPv6基盤構築
 → [docs/phase2-ipv6.md](docs/phase2-ipv6.md)
 
-- [ ] 2-1: RA受信・DHCPv6-PD取得
-- [ ] 2-2: LAN側RA配布設定
-- [ ] 2-3: IPv6ファイアウォール設定 (forward filter)
+- [x] 2-1: RA受信・DHCPv6-PD取得 (2404:7a82:4d02:4100::/56)
+  - DUID-LL形式必須: `00:03:00:01:MAC`
+  - 詳細は [troubleshooting-dhcpv6-pd.md](docs/troubleshooting-dhcpv6-pd.md)
+- [x] 2-2: LAN側RA配布設定 (2026-01-06完了)
+  - eth2で ::/64 配布
+  - DNS: Cloudflare + Google
+- [x] 2-3: IPv6ファイアウォール設定 (2026-01-06完了)
+  - input/forward filter設定済み
+  - ICMPv6, DHCPv6許可
 
 ### Phase 3: WireGuard VPN
 → [docs/phase3-wireguard.md](docs/phase3-wireguard.md)
@@ -112,10 +118,14 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### Phase 4: WXR隔離・IPv4ルーティング
 → [docs/phase4-wxr-routing.md](docs/phase4-wxr-routing.md)
 
-- [ ] 4-1: L2スイッチ経由でWXRをONUに接続
-- [ ] 4-2: WXR MAP-E専用化
-- [ ] 4-3: 別セグメント構築
-- [ ] 4-4: IPv4ルーティング
+- [ ] 4-1: L2スイッチ経由でWXRをONUに接続 (物理配線待ち)
+- [x] 4-2: WXR MAP-E専用化 (完了)
+  - LAN側IP: 192.168.100.1
+  - DHCPサーバー: 無効
+- [x] 4-3: 別セグメント構築 (完了)
+  - eth0: 192.168.100.2/24
+  - NAT source rule 100 設定済み
+- [ ] 4-4: IPv4ルーティング検証 (配線後)
 
 ### Phase 5: 運用設定
 → [docs/phase5-operations.md](docs/phase5-operations.md)
@@ -126,7 +136,9 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### Phase 6: バックアップ体制
 → [docs/phase6-backup.md](docs/phase6-backup.md)
 
-- [ ] 6-1: VyOS設定バックアップ
+- [x] 6-1: VyOS設定バックアップ (完了)
+  - 日次自動バックアップ: /config/scripts/backup.sh (毎日3:00)
+  - 手動バックアップ: /config/backup-YYYYMMDD.txt
 - [ ] 6-2: WireGuard鍵バックアップ
 
 ---
@@ -144,7 +156,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ## トラブルシューティング
 
-- [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - 調査中
+- [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - **解決済み** (DUID-LL形式が必須)
 
 ---
 
