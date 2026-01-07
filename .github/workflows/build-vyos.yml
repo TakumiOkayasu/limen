@@ -72,9 +72,21 @@ jobs:
               # Apply config
               make vyos_defconfig
 
+              # Disable MODULE_SIG_FORCE in .config directly (more reliable than sed on defconfig)
+              echo "Disabling MODULE_SIG_FORCE in .config..."
+              ./scripts/config --disable MODULE_SIG_FORCE
+              make olddefconfig
+
               # Verify the change
               echo "Kernel config MODULE_SIG settings:"
               grep -E "MODULE_SIG" .config || true
+
+              # Final verification
+              if grep -q "CONFIG_MODULE_SIG_FORCE=y" .config; then
+                echo "ERROR: MODULE_SIG_FORCE is still enabled!"
+                exit 1
+              fi
+              echo "SUCCESS: MODULE_SIG_FORCE is disabled"
 
               # Build kernel and create deb packages
               echo "Building kernel packages..."
