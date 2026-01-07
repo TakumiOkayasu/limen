@@ -159,56 +159,9 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ## トラブルシューティング
 
-- [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - **解決済み** (DUID-LL形式が必須)
-
----
-
-## VyOS環境の制約・注意事項
-
-以下は実際に試行して判明した制約。同じ失敗を繰り返さないこと。
-
-### 使えないコマンド
-
-| コマンド | 代替手段 |
-|----------|----------|
-| `xxd` | `od -A x -t x1z` または `hexdump -C` |
-
-### VyOS構文の変更 (Rolling Release)
-
-| 旧構文 | 新構文 |
-|--------|--------|
-| `set system ntp server <server>` | `set service ntp server <server>` |
-
-### DHCPv6-PD (wide-dhcpv6-client) 関連
-
-- **DUIDファイル形式**: `/var/lib/dhcpv6/dhcp6c_duid` は先頭2バイトがリトルエンディアンの長さ
-  - 例: 10バイトのDUIDなら `\x0a\x00` + DUID本体
-- **DUID-LL形式**: `00:03:00:01:MAC` (NTT NGNはこの形式が必須)
-- **設定ファイルの`send client-id`**: DUIDファイルより優先されるため、DUIDファイルを使う場合は`send client-id`行を削除した設定ファイルを使用
-
-### BIGLOBE 10ギガプランの制約
-
-- **PPPoE接続不可**: 10ギガプラン(ファミリー10ギガタイプ)ではPPPoE接続は対象外
-- **IPv6オプションのみ**: IPoE + MAP-E相当の方式でのみIPv4接続可能
-- **DHCPv6-PD競合**: NGNは/56を1つしか払い出さないため、VyOSとWXRで競合する
-
----
-
-## ⚠️ 危険な操作と失敗事例
-
-### カーネル更新 (2026-01-07 失敗)
-
-**詳細**: [docs/failure-log-2026-01-07-kernel-update.md](docs/failure-log-2026-01-07-kernel-update.md)
-
-**要約**: MODULE_SIG_FORCE=n でカーネルを再ビルドしてインストールしたが、設定が反映されておらずVyOS起動不能に。
-
-**教訓**:
-1. カーネル更新は必ずVMで事前検証
-2. debパッケージのconfigを**インストール前に検証**
-3. ロールバック手順を事前確認
-4. 設定バックアップを必ず取得
-
-**安全な手順**: [docs/phase6-backup.md](docs/phase6-backup.md) の「カーネル更新手順」参照
+- [IPv6疎通問題](docs/troubleshooting-ipv6.md) - チェックリスト、過去の失敗パターン、VyOS制約
+- [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - DUID-LL形式が必須
+- [カーネル更新失敗](docs/failure-log-2026-01-07-kernel-update.md) - MODULE_SIG_FORCE問題
 
 ---
 
