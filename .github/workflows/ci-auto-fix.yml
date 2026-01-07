@@ -2,7 +2,7 @@ name: CI Auto Fix
 
 on:
   workflow_run:
-    workflows: ["Build Custom VyOS ISO"]
+    workflows: ["Build Custom VyOS ISO", "Build VyOS Kernel with r8126 Module"]
     types: [completed]
 
 jobs:
