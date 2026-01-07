@@ -6,8 +6,10 @@
 # --- 基本設定 ---
 set system host-name 'vyos-router'
 set system time-zone 'Asia/Tokyo'
-set system ntp server ntp.nict.jp
-set system ntp server ntp.jst.mfeed.ad.jp
+
+# NTP設定 (VyOS Rolling Releaseでは service ntp)
+set service ntp server ntp.nict.jp
+set service ntp server ntp.jst.mfeed.ad.jp
 
 # --- eth0: WXR接続 または PPPoE用 ---
 # 注意: 以下は構成によって変更が必要
