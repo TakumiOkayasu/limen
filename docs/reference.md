@@ -94,6 +94,17 @@ VyOS 2024.x以降の新構文: `firewall ipv6 forward filter`
 - **L2スイッチ**: BUFFALO LXW-10G5 (10GbE 5ポート、ONU直下で分岐用)
 - **既存ルーター**: Buffalo WXR9300BE6P (10Gポート×1, 1Gポート×4)
 
+### 機器MACアドレス一覧
+
+| 機器 | MACアドレス | 備考 |
+|------|-------------|------|
+| ONU (10G-EPON) | `00:11:57:A8:CA:68` | NTT日本電信電話 |
+| LXW-10G5 | `EC:5A:31:06:19:AD` | BUFFALO 10GbE L2スイッチ |
+| WXR9300BE6P | `F0:F8:4A:67:58:00` | BUFFALO ルーター (有線MAC) |
+| NGNゲートウェイ | `A4:11:BB:7D:EE:11` | `fe80::a611:bbff:fe7d:ee11` - RAで広告される |
+
+**注意**: `F0:F8:4A:67:58:00` はWXRのMACであり、NGNゲートウェイではない。
+
 ### ソフトウェア
 
 - **OS**: VyOS Rolling Release (無償版、Debian 12ベース)
