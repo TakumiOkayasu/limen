@@ -173,6 +173,12 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 |----------|----------|
 | `xxd` | `od -A x -t x1z` または `hexdump -C` |
 
+### VyOS構文の変更 (Rolling Release)
+
+| 旧構文 | 新構文 |
+|--------|--------|
+| `set system ntp server <server>` | `set service ntp server <server>` |
+
 ### DHCPv6-PD (wide-dhcpv6-client) 関連
 
 - **DUIDファイル形式**: `/var/lib/dhcpv6/dhcp6c_duid` は先頭2バイトがリトルエンディアンの長さ
