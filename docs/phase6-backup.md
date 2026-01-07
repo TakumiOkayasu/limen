@@ -169,6 +169,37 @@ commit
 save
 ```
 
+### 2.5. SSH公開鍵登録 (パスキー接続)
+
+```bash
+# [Mac] 公開鍵を確認
+cat ~/.ssh/id_ed25519-touch-id.pub
+# 出力例: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@host
+```
+
+```bash
+# [VyOS] 公開鍵を登録
+configure
+
+# keyには "ssh-ed25519 " 以降の文字列のみを指定
+set system login user vyos authentication public-keys macbook type ssh-ed25519
+set system login user vyos authentication public-keys macbook key 'AAAAC3NzaC1lZDI1NTE5...'
+
+commit
+save
+```
+
+```bash
+# [Mac] 接続テスト (パスワード不要で接続できることを確認)
+ssh vyos@192.168.1.1
+```
+
+**⚠️ 注意**: 再インストール後はホスト鍵が変わるため、接続エラーが出る場合:
+```bash
+# [Mac] 古いホスト鍵を削除
+ssh-keygen -R 192.168.1.1
+```
+
 ### 3. SSH経由で設定復元
 ```bash
 # [Mac] バックアップファイルをVyOSに転送
@@ -196,8 +227,29 @@ sudo tar -xzf /tmp/wireguard-keys.tar.gz -C /
 ```
 
 ### 5. 動作確認
+
+```bash
+# [VyOS] インターフェース状態確認
+show interfaces
+
+# IPv6アドレス取得確認 (eth1にグローバルアドレスがあること)
+show interfaces ethernet eth1
+
+# IPv6疎通確認
+ping6 google.com -c 3
+
+# ファイアウォール設定確認
+show firewall
+
+# NTP同期確認
+show ntp
+```
+
+**チェックリスト**:
 - [ ] SSHログイン可能
-- [ ] IPv6通信可能 (`ping6 google.com`)
+- [ ] eth1にIPv6グローバルアドレスがある
+- [ ] `ping6 google.com` が通る
+- [ ] ファイアウォールルールが設定されている
 - [ ] WireGuard接続可能 (設定済みの場合)
 
 ---
