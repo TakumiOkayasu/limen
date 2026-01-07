@@ -114,9 +114,30 @@ jobs:
               echo "=== r8126 module info ==="
               modinfo r8126.ko
 
+              # Save kernel config for verification
+              echo "=== Saving kernel config for verification ==="
+              cp .config /vyos/output/kernel-config-${KERNEL_VERSION}
+
               echo "=== Build completed ==="
               ls -la /vyos/output/
             '
+
+      - name: Verify kernel config in artifact
+        run: |
+          echo "=== Verifying kernel config ==="
+          CONFIG_FILE="vyos-build/output/kernel-config-${{ github.event.inputs.kernel_version }}"
+          if [ -f "$CONFIG_FILE" ]; then
+            echo "MODULE_SIG settings in built kernel:"
+            grep -E "MODULE_SIG" "$CONFIG_FILE" || true
+
+            if grep -q "CONFIG_MODULE_SIG_FORCE=y" "$CONFIG_FILE"; then
+              echo "::error::CRITICAL: MODULE_SIG_FORCE is enabled! This kernel will reject unsigned modules."
+              exit 1
+            fi
+            echo "✅ MODULE_SIG_FORCE is disabled - kernel is safe to use"
+          else
+            echo "::warning::kernel config file not found"
+          fi
 
       - name: Upload kernel packages
         uses: actions/upload-artifact@v6
@@ -130,4 +151,11 @@ jobs:
         with:
           name: r8126-module
           path: vyos-build/output/r8126.ko
+          retention-days: 30
+
+      - name: Upload kernel config (for verification)
+        uses: actions/upload-artifact@v6
+        with:
+          name: kernel-config
+          path: vyos-build/output/kernel-config-*
           retention-days: 30
