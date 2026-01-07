@@ -35,10 +35,10 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 | VyOS名 | NIC | 速度 | 用途 |
 |--------|-----|------|------|
-| eth0 | オンボード | 1GbE | WXR接続 (別セグメント 192.168.100.x) |
+| eth0 | オンボード | 1GbE | WXR WAN側接続 (MAP-E upstream) |
 | eth1 | Intel X540-T2 Port2 | 10GbE | WAN (LXW-10G5経由でONU) |
 | eth2 | Intel X540-T2 Port1 | 10GbE | LAN (主要機器向け) |
-| (未使用) | RTL8126 | 5GbE | フレキシブル (必要時に接続) |
+| (未使用) | RTL8126 | 5GbE | **将来eth0の代替予定** (WXR接続を5Gbpsに高速化) |
 
 ### WXR接続用別セグメント (192.168.100.x)
 
@@ -118,14 +118,17 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### Phase 4: WXR隔離・IPv4ルーティング
 → [docs/phase4-wxr-routing.md](docs/phase4-wxr-routing.md)
 
-- [ ] 4-1: L2スイッチ経由でWXRをONUに接続 (物理配線待ち)
+- [x] 4-1: L2スイッチ経由でWXRをONUに接続 (2026-01-06完了)
 - [x] 4-2: WXR MAP-E専用化 (完了)
   - LAN側IP: 192.168.100.1
   - DHCPサーバー: 無効
+  - **重要**: 「インターネット@スタートを行う」(自動判別)を使用すること。「v6プラス」手動選択は動作しない
 - [x] 4-3: 別セグメント構築 (完了)
   - eth0: 192.168.100.2/24
   - NAT source rule 100 設定済み
-- [ ] 4-4: IPv4ルーティング検証 (配線後)
+- [x] 4-4: IPv4ルーティング設定完了 (2026-01-06)
+  - デフォルトルート: 0.0.0.0/0 via 192.168.100.1
+  - LAN → WXR → MAP-E → インターネット 疎通確認済み
 
 ### Phase 5: 運用設定
 → [docs/phase5-operations.md](docs/phase5-operations.md)
