@@ -116,7 +116,7 @@ jobs:
 
               # Save kernel config for verification
               echo "=== Saving kernel config for verification ==="
-              cp .config /vyos/output/kernel-config-${KERNEL_VERSION}
+              cp /vyos/scripts/package-build/linux-kernel/linux/.config /vyos/output/kernel-config-${KERNEL_VERSION}
 
               echo "=== Build completed ==="
               ls -la /vyos/output/
