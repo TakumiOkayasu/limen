@@ -143,32 +143,129 @@ show wireguard keypairs pubkey rotation-$(date +%Y%m%d)
 VyOSが起動しなくなった場合の復旧手順:
 
 ### 1. 新規インストール
-1. VyOS ISOからブート
-2. `install image`でクリーンインストール
-3. 再起動
+1. VyOS ISOをUSBに書き込み
+   ```bash
+   # [Mac]
+   diskutil list  # USBデバイス確認
+   diskutil unmountDisk /dev/diskX
+   sudo dd if=vyos-*.iso of=/dev/rdiskX bs=1m status=progress
+   ```
+2. USBからブート (BIOS/UEFIでブート順変更)
+3. `install image`でクリーンインストール
+4. 再起動
 
-### 2. 設定復元
+### 2. 最小限の設定 (SSH接続可能にする)
 ```bash
-# バックアップファイルをVyOSに転送
-scp ~/backups/vyos/config-YYYYMMDD.boot vyos@<IP>:/tmp/
+# VyOSコンソールで実行
+configure
 
-# VyOS上で復元
+# LAN側IPとSSH設定
+set interfaces ethernet eth2 address '192.168.1.1/24'
+set interfaces ethernet eth2 description 'LAN'
+set service ssh listen-address '192.168.1.1'
+set service ssh port '22'
+
+commit
+save
+```
+
+### 3. SSH経由で設定復元
+```bash
+# [Mac] バックアップファイルをVyOSに転送
+scp ~/backups/vyos/config-YYYYMMDD.boot vyos@192.168.1.1:/tmp/
+
+# または scripts/backup-vyos-config.txt を使用
+scp scripts/backup-vyos-config.txt vyos@192.168.1.1:/tmp/
+```
+
+```bash
+# [VyOS] 設定を復元
 configure
 load /tmp/config-YYYYMMDD.boot
 commit
 save
 ```
 
-### 3. WireGuard鍵復元
+### 4. WireGuard鍵復元 (設定済みの場合)
 ```bash
 # 鍵ファイルを転送
-scp wireguard-keys.tar.gz vyos@<IP>:/tmp/
+scp wireguard-keys.tar.gz vyos@192.168.1.1:/tmp/
 
 # VyOS上で展開
 sudo tar -xzf /tmp/wireguard-keys.tar.gz -C /
 ```
 
-### 4. 動作確認
+### 5. 動作確認
 - [ ] SSHログイン可能
-- [ ] IPv6通信可能
-- [ ] WireGuard接続可能
+- [ ] IPv6通信可能 (`ping6 google.com`)
+- [ ] WireGuard接続可能 (設定済みの場合)
+
+---
+
+## カーネル更新手順 (危険な操作)
+
+⚠️ **警告**: カーネル更新は失敗するとVyOSが起動不能になります。
+必ず以下の手順に従ってください。
+
+### 事前準備チェックリスト
+
+- [ ] 現在の設定をバックアップした (`show configuration commands > /config/backup-YYYYMMDD.txt`)
+- [ ] 現在のカーネルバージョンを記録した (`uname -r`)
+- [ ] **ビルドしたdebのconfigを検証した** (後述)
+- [ ] テスト環境(VM)で動作確認した
+- [ ] 物理コンソールアクセスを確保した
+- [ ] GRUBで旧カーネル起動できることを確認した
+- [ ] ロールバック手順を把握している
+- [ ] メンテナンス時間を確保した (最低1時間)
+
+### ビルド成果物の検証 (必須)
+
+**インストール前に必ず実行**:
+
+```bash
+# [VyOS] debパッケージの内容を検証
+mkdir -p /tmp/kernel-check
+dpkg -x /path/to/linux-image-*.deb /tmp/kernel-check
+grep CONFIG_MODULE_SIG_FORCE /tmp/kernel-check/boot/config-*
+
+# 期待する出力: # CONFIG_MODULE_SIG_FORCE is not set
+# 以下が出たら絶対にインストールしない:
+#   CONFIG_MODULE_SIG_FORCE=y
+```
+
+### インストール手順
+
+```bash
+# 1. 設定バックアップ (再確認)
+show configuration commands > /config/backup-$(date +%Y%m%d-%H%M).txt
+
+# 2. カーネルインストール
+sudo dpkg -i linux-image-*.deb
+
+# 3. インストール後、再起動前に確認
+ls /boot/vmlinuz-*
+# 複数のカーネルがあることを確認
+
+# 4. 再起動
+sudo reboot
+```
+
+### ロールバック手順
+
+起動に失敗した場合:
+
+1. 起動直後に **Shift** または **Esc** を連打してGRUBメニュー表示
+2. GRUBコマンドラインに入った場合は `normal` でメニュー表示
+3. 旧カーネルを選択して起動
+4. 起動後、問題のカーネルを削除:
+   ```bash
+   sudo dpkg --force-depends --purge linux-image-<問題のバージョン>
+   ```
+
+### 失敗事例 (2026-01-07)
+
+詳細: [failure-log-2026-01-07-kernel-update.md](failure-log-2026-01-07-kernel-update.md)
+
+- MODULE_SIG_FORCE=n でビルドしたつもりが反映されていなかった
+- 検証なしでインストールした結果、VyOS起動不能に
+- 復旧にVyOS再インストールが必要になった
