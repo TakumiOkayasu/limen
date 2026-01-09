@@ -56,23 +56,19 @@ jobs:
               echo "=== Building VyOS kernel with signed r8126 module ==="
               echo "Kernel version: ${KERNEL_VERSION}"
 
-              # Create work directory
               WORK_DIR=/vyos/kernel-build
               mkdir -p ${WORK_DIR}
               cd ${WORK_DIR}
 
-              # Step 1: Get VyOS kernel config
               echo "=== Step 1: Getting VyOS kernel config ==="
               git clone https://github.com/vyos/vyos-build-kernel.git || true
 
-              # Download kernel source
               MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
               echo "Downloading kernel ${KERNEL_VERSION}..."
               curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
               tar xf linux-${KERNEL_VERSION}.tar.xz
               cd linux-${KERNEL_VERSION}
 
-              # Apply VyOS config
               if [ -f "../vyos-build-kernel/x86_64_vyos_defconfig" ]; then
                 echo "Using VyOS defconfig..."
                 cp ../vyos-build-kernel/x86_64_vyos_defconfig .config
@@ -82,49 +78,30 @@ jobs:
                 make defconfig
               fi
 
-              # Step 2: Generate signing keys
               echo "=== Step 2: Generating module signing keys ==="
               mkdir -p certs
-              cat > x509.genkey << EOF
-[ req ]
-default_bits = 4096
-distinguished_name = req_distinguished_name
-prompt = no
-x509_extensions = v3_ca
 
-[ req_distinguished_name ]
-CN = VyOS Module Signing Key
-emailAddress = build@vyos.local
+              # x509.genkey content (base64 encoded to avoid YAML issues)
+              echo "W3JlcV0KZGVmYXVsdF9iaXRzID0gNDA5NgpkaXN0aW5ndWlzaGVkX25hbWUgPSByZXFfZGlzdGluZ3Vpc2hlZF9uYW1lCnByb21wdCA9IG5vCng1MDlfZXh0ZW5zaW9ucyA9IHYzX2NhCgpbcmVxX2Rpc3Rpbmd1aXNoZWRfbmFtZV0KQ04gPSBWeU9TIE1vZHVsZSBTaWduaW5nIEtleQplbWFpbEFkZHJlc3MgPSBidWlsZEB2eW9zLmxvY2FsCgpbdjNfY2FdCmJhc2ljQ29uc3RyYWludHM9Y3JpdGljYWwsQ0E6RkFMU0UKa2V5VXNhZ2U9ZGlnaXRhbFNpZ25hdHVyZQpzdWJqZWN0S2V5SWRlbnRpZmllcj1oYXNoCmF1dGhvcml0eUtleUlkZW50aWZpZXI9a2V5aWQK" | base64 -d > x509.genkey
 
-[ v3_ca ]
-basicConstraints=critical,CA:FALSE
-keyUsage=digitalSignature
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid
-EOF
               openssl req -new -nodes -utf8 -sha512 -days 36500 \
                 -batch -x509 -config x509.genkey \
                 -outform PEM -out certs/signing_key.pem \
                 -keyout certs/signing_key.pem
 
-              # Update config to use the key
               ./scripts/config --set-str MODULE_SIG_KEY "certs/signing_key.pem"
               ./scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
               make olddefconfig
 
-              # Show MODULE_SIG settings
               echo "MODULE_SIG settings:"
               grep -E "MODULE_SIG|SYSTEM_TRUSTED" .config || true
 
-              # Step 3: Build kernel
               echo "=== Step 3: Building kernel ==="
               make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
 
-              # Move kernel debs to output
               mkdir -p /vyos/output
               mv ../*.deb /vyos/output/ || true
 
-              # Step 4: Build r8126 driver
               echo "=== Step 4: Building r8126 driver ==="
               cd /tmp
               curl -L -o r8126.tar.bz2 https://github.com/openwrt/rtl8126/releases/download/10.016.00/r8126-10.016.00.tar.bz2
@@ -135,14 +112,12 @@ EOF
               echo "Building r8126 module against ${KERNEL_DIR}..."
               make -C ${KERNEL_DIR} M=$(pwd) modules
 
-              # Step 5: Sign the module
               echo "=== Step 5: Signing r8126 module ==="
               ${KERNEL_DIR}/scripts/sign-file sha512 \
                 ${KERNEL_DIR}/certs/signing_key.pem \
                 ${KERNEL_DIR}/certs/signing_key.pem \
                 r8126.ko
 
-              # Verify signature
               echo "Verifying module signature..."
               if strings r8126.ko | grep -q "~Module signature appended~"; then
                 echo "SUCCESS: r8126.ko is signed"
@@ -150,18 +125,12 @@ EOF
                 echo "WARNING: Module signature not detected"
               fi
 
-              # Show module info
               echo "=== Module info ==="
               modinfo r8126.ko || true
 
-              # Copy outputs
               echo "=== Step 6: Collecting outputs ==="
               cp r8126.ko /vyos/output/r8126-signed.ko
-
-              # Save the signing key (public part only for verification)
               openssl x509 -in ${KERNEL_DIR}/certs/signing_key.pem -outform DER -out /vyos/output/signing_key.x509
-
-              # Save kernel config for verification
               cp ${KERNEL_DIR}/.config /vyos/output/kernel-config
 
               echo "=== Build completed ==="
@@ -181,9 +150,9 @@ EOF
           echo ""
           echo "=== Checking if module is signed ==="
           if strings vyos-build/output/r8126-signed.ko | grep -q "~Module signature appended~"; then
-            echo "✅ r8126-signed.ko has valid signature"
+            echo "r8126-signed.ko has valid signature"
           else
-            echo "❌ r8126-signed.ko signature not found"
+            echo "r8126-signed.ko signature not found"
             exit 1
           fi
 
