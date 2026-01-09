@@ -5,6 +5,10 @@ on:
     workflows: ["Build Custom VyOS ISO", "Build VyOS Kernel with Signed r8126 Module"]
     types: [completed]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   auto-fix:
     runs-on: ubuntu-latest
