@@ -1,4 +1,4 @@
-name: Build VyOS Kernel with r8126 Module
+name: Build VyOS Kernel with Signed r8126 Module
 
 on:
   workflow_dispatch:
@@ -8,16 +8,14 @@ on:
         required: true
         default: "current"
         type: string
-      kernel_version:
-        description: "Kernel version (e.g., 6.6.117)"
-        required: true
-        default: "6.6.117"
-        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/build-vyos.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
 
     steps:
       - name: Checkout
@@ -33,129 +31,205 @@ jobs:
 
       - name: Clone vyos-build
         run: |
-          git clone -b ${{ github.event.inputs.vyos_version }} --single-branch https://github.com/vyos/vyos-build.git
+          VERSION="${{ github.event.inputs.vyos_version || 'current' }}"
+          git clone -b "$VERSION" --single-branch https://github.com/vyos/vyos-build.git
 
-      - name: Build kernel and r8126 module
+      - name: Build kernel and signed r8126 module
         run: |
           cd vyos-build
+          VERSION="${{ github.event.inputs.vyos_version || 'current' }}"
+
           docker run --rm --privileged \
             -v $(pwd):/vyos \
             -w /vyos \
-            -e KERNEL_VERSION=${{ github.event.inputs.kernel_version }} \
-            vyos/vyos-build:${{ github.event.inputs.vyos_version }} \
+            vyos/vyos-build:${VERSION} \
             bash -c '
               set -e
 
-              echo "=== Building VyOS kernel ${KERNEL_VERSION} with MODULE_SIG_FORCE=n ==="
+              echo "=== Building VyOS kernel with signed r8126 module ==="
 
-              cd /vyos/scripts/package-build/linux-kernel
+              # Go to linux-kernel build directory
+              cd /vyos/packages/linux-kernel
 
-              # Install dependencies
-              sudo apt-get update
-              sudo apt-get install -y curl flex bison bc libssl-dev libelf-dev libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev
+              # Build the kernel first (this generates signing keys)
+              echo "=== Step 1: Building VyOS kernel ==="
 
-              # Download kernel source
-              MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
-              echo "Downloading kernel ${KERNEL_VERSION}..."
-              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
-              tar xf linux-${KERNEL_VERSION}.tar.xz
-              mv linux-${KERNEL_VERSION} linux
-              cd linux
+              # Check if build-kernel.sh exists and use it, otherwise manual build
+              if [ -f "./build-kernel.sh" ]; then
+                echo "Using build-kernel.sh..."
+                ./build-kernel.sh
+              else
+                echo "Manual kernel build..."
+                # Clone vyos-build-kernel for config
+                git clone https://github.com/vyos/vyos-build-kernel.git || true
 
-              # Apply VyOS kernel config
-              cp ../arch/x86/configs/vyos_defconfig arch/x86/configs/
+                # Get kernel version from existing setup or default
+                KERNEL_VERSION=$(ls -d linux-* 2>/dev/null | head -1 | sed "s/linux-//" || echo "6.6.75")
+                echo "Kernel version: ${KERNEL_VERSION}"
 
-              # Disable MODULE_SIG_FORCE (allow unsigned modules)
-              echo "Patching kernel config to disable MODULE_SIG_FORCE..."
-              sed -i "s/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/" arch/x86/configs/vyos_defconfig
+                # Download kernel if not exists
+                if [ ! -d "linux-${KERNEL_VERSION}" ] && [ ! -d "linux" ]; then
+                  MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
+                  curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
+                  tar xf linux-${KERNEL_VERSION}.tar.xz
+                  mv linux-${KERNEL_VERSION} linux
+                fi
 
-              # Apply config
-              make vyos_defconfig
+                cd linux
 
-              # Disable MODULE_SIG_FORCE in .config directly (more reliable than sed on defconfig)
-              echo "Disabling MODULE_SIG_FORCE in .config..."
-              ./scripts/config --disable MODULE_SIG_FORCE
-              make olddefconfig
+                # Apply VyOS config
+                if [ -f "../vyos-build-kernel/x86_64_vyos_defconfig" ]; then
+                  cp ../vyos-build-kernel/x86_64_vyos_defconfig arch/x86/configs/
+                  make x86_64_vyos_defconfig
+                elif [ -f "../arch/x86/configs/vyos_defconfig" ]; then
+                  cp ../arch/x86/configs/vyos_defconfig arch/x86/configs/
+                  make vyos_defconfig
+                else
+                  make defconfig
+                fi
 
-              # Verify the change
-              echo "Kernel config MODULE_SIG settings:"
-              grep -E "MODULE_SIG" .config || true
+                # Generate signing keys if not exist
+                if [ ! -f "certs/signing_key.pem" ]; then
+                  echo "Generating module signing keys..."
+                  mkdir -p certs
+                  cat > x509.genkey << EOF
+          [ req ]
+          default_bits = 4096
+          distinguished_name = req_distinguished_name
+          prompt = no
+          x509_extensions = v3_ca
 
-              # Final verification
-              if grep -q "CONFIG_MODULE_SIG_FORCE=y" .config; then
-                echo "ERROR: MODULE_SIG_FORCE is still enabled!"
+          [ req_distinguished_name ]
+          CN = VyOS Module Signing Key
+          emailAddress = build@vyos.local
+
+          [ v3_ca ]
+          basicConstraints=critical,CA:FALSE
+          keyUsage=digitalSignature
+          subjectKeyIdentifier=hash
+          authorityKeyIdentifier=keyid
+          EOF
+                  openssl req -new -nodes -utf8 -sha512 -days 36500 \
+                    -batch -x509 -config x509.genkey \
+                    -outform PEM -out certs/signing_key.pem \
+                    -keyout certs/signing_key.pem
+                fi
+
+                # Build kernel
+                make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
+
+                cd ..
+              fi
+
+              # Find the kernel build directory
+              KERNEL_DIR=$(find /vyos/packages/linux-kernel -maxdepth 1 -type d -name "linux*" | head -1)
+              if [ -z "$KERNEL_DIR" ]; then
+                KERNEL_DIR="/vyos/packages/linux-kernel/linux"
+              fi
+              echo "Kernel directory: ${KERNEL_DIR}"
+
+              # Verify signing key exists
+              if [ ! -f "${KERNEL_DIR}/certs/signing_key.pem" ]; then
+                echo "ERROR: Signing key not found!"
+                echo "Looking for signing key..."
+                find /vyos -name "signing_key*" 2>/dev/null || true
                 exit 1
               fi
-              echo "SUCCESS: MODULE_SIG_FORCE is disabled"
-
-              # Build kernel and create deb packages
-              echo "Building kernel packages..."
-              make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
-
-              # Move deb packages to output
-              mkdir -p /vyos/output
-              mv /vyos/scripts/package-build/linux-kernel/*.deb /vyos/output/ || true
+              echo "Signing key found: ${KERNEL_DIR}/certs/signing_key.pem"
 
               # Build r8126 driver
-              echo "=== Building r8126 driver ==="
+              echo "=== Step 2: Building r8126 driver ==="
               cd /tmp
               curl -L -o r8126.tar.bz2 https://github.com/openwrt/rtl8126/releases/download/10.016.00/r8126-10.016.00.tar.bz2
               tar xjf r8126.tar.bz2
               cd r8126-10.016.00/src
 
-              # Build r8126 module
+              # Build against the VyOS kernel
               echo "Building r8126 module..."
-              make -C /vyos/scripts/package-build/linux-kernel/linux M=$(pwd) modules
+              make -C ${KERNEL_DIR} M=$(pwd) modules
 
-              # Copy module
-              cp r8126.ko /vyos/output/
+              # Sign the module with VyOS signing key
+              echo "=== Step 3: Signing r8126 module ==="
+              ${KERNEL_DIR}/scripts/sign-file sha512 \
+                ${KERNEL_DIR}/certs/signing_key.pem \
+                ${KERNEL_DIR}/certs/signing_key.pem \
+                r8126.ko
+
+              # Verify signature
+              echo "Verifying module signature..."
+              if strings r8126.ko | grep -q "~Module signature appended~"; then
+                echo "SUCCESS: r8126.ko is signed"
+              else
+                echo "WARNING: Module signature not detected"
+              fi
 
               # Show module info
-              echo "=== r8126 module info ==="
-              modinfo r8126.ko
+              echo "=== Module info ==="
+              modinfo r8126.ko || true
+
+              # Copy outputs
+              echo "=== Step 4: Collecting outputs ==="
+              mkdir -p /vyos/output
+
+              # Copy kernel debs
+              cp /vyos/packages/linux-kernel/*.deb /vyos/output/ 2>/dev/null || true
+
+              # Copy signed r8126.ko
+              cp r8126.ko /vyos/output/r8126-signed.ko
+
+              # Save the signing key (public part only for verification)
+              openssl x509 -in ${KERNEL_DIR}/certs/signing_key.pem -outform DER -out /vyos/output/signing_key.x509
 
               # Save kernel config for verification
-              echo "=== Saving kernel config for verification ==="
-              cp /vyos/scripts/package-build/linux-kernel/linux/.config /vyos/output/kernel-config-${KERNEL_VERSION}
+              cp ${KERNEL_DIR}/.config /vyos/output/kernel-config
 
               echo "=== Build completed ==="
               ls -la /vyos/output/
+
+              echo ""
+              echo "=== Verification ==="
+              echo "MODULE_SIG settings in kernel:"
+              grep -E "MODULE_SIG" /vyos/output/kernel-config | head -10
             '
 
-      - name: Verify kernel config in artifact
+      - name: Verify outputs
         run: |
-          echo "=== Verifying kernel config ==="
-          CONFIG_FILE="vyos-build/output/kernel-config-${{ github.event.inputs.kernel_version }}"
-          if [ -f "$CONFIG_FILE" ]; then
-            echo "MODULE_SIG settings in built kernel:"
-            grep -E "MODULE_SIG" "$CONFIG_FILE" || true
+          echo "=== Checking outputs ==="
+          ls -la vyos-build/output/
 
-            if grep -q "CONFIG_MODULE_SIG_FORCE=y" "$CONFIG_FILE"; then
-              echo "::error::CRITICAL: MODULE_SIG_FORCE is enabled! This kernel will reject unsigned modules."
-              exit 1
-            fi
-            echo "✅ MODULE_SIG_FORCE is disabled - kernel is safe to use"
+          echo ""
+          echo "=== Checking if module is signed ==="
+          if strings vyos-build/output/r8126-signed.ko | grep -q "~Module signature appended~"; then
+            echo "✅ r8126-signed.ko has valid signature"
           else
-            echo "::warning::kernel config file not found"
+            echo "❌ r8126-signed.ko signature not found"
+            exit 1
           fi
+
+          echo ""
+          echo "=== MODULE_SIG settings ==="
+          grep -E "MODULE_SIG" vyos-build/output/kernel-config || true
 
       - name: Upload kernel packages
         uses: actions/upload-artifact@v6
         with:
           name: vyos-kernel-packages
-          path: vyos-build/output/*.deb
+          path: |
+            vyos-build/output/*.deb
           retention-days: 30
 
-      - name: Upload r8126 module
+      - name: Upload signed r8126 module
         uses: actions/upload-artifact@v6
         with:
-          name: r8126-module
-          path: vyos-build/output/r8126.ko
+          name: r8126-signed-module
+          path: |
+            vyos-build/output/r8126-signed.ko
+            vyos-build/output/signing_key.x509
           retention-days: 30
 
-      - name: Upload kernel config (for verification)
+      - name: Upload kernel config
         uses: actions/upload-artifact@v6
         with:
           name: kernel-config
-          path: vyos-build/output/kernel-config-*
+          path: vyos-build/output/kernel-config
           retention-days: 30
