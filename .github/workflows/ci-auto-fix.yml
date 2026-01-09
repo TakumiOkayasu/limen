@@ -5,9 +5,13 @@ on:
     workflows: ["Build Custom VyOS ISO", "Build VyOS Kernel with Signed r8126 Module"]
     types: [completed]
 
+# Note: GITHUB_TOKEN cannot grant 'workflows' permission.
+# Auto-fix for workflow files requires a PAT with 'workflow' scope.
+# This workflow can only fix non-workflow files automatically.
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 jobs:
   auto-fix:
