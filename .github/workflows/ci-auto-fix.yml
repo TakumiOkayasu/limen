@@ -77,7 +77,7 @@ jobs:
         run: |
           RESPONSE=$(cat /tmp/claude_response.txt)
 
-          if echo "$RESPONSE" | grep -q "---FIX_START---"; then
+          if echo "$RESPONSE" | grep -qF -- "---FIX_START---"; then
             echo "Fix detected, applying..."
 
             # ファイルパスを抽出
@@ -94,7 +94,7 @@ jobs:
             echo "Fixed: $FILE_PATH"
           else
             echo "No fix needed or not a workflow issue"
-            echo "$RESPONSE" | grep -A5 "---NO_FIX---" || true
+            echo "$RESPONSE" | grep -aF -- "---NO_FIX---" | head -5 || true
             echo "has_fix=false" >> $GITHUB_OUTPUT
           fi
 
