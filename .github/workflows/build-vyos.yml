@@ -56,12 +56,17 @@ jobs:
               echo "=== Building VyOS kernel with signed r8126 module ==="
               echo "Kernel version: ${KERNEL_VERSION}"
 
+              # Install build dependencies
+              sudo apt-get update
+              sudo apt-get install -y flex bison libelf-dev libssl-dev bc
+
               WORK_DIR=/vyos/kernel-build
               mkdir -p ${WORK_DIR}
               cd ${WORK_DIR}
 
               echo "=== Step 1: Getting VyOS kernel config ==="
-              git clone https://github.com/vyos/vyos-build-kernel.git || true
+              # Use vyos-build packages/linux-kernel defconfig
+              DEFCONFIG_PATH="/vyos/packages/linux-kernel/arch/x86/configs/vyos_defconfig"
 
               MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
               echo "Downloading kernel ${KERNEL_VERSION}..."
@@ -69,12 +74,18 @@ jobs:
               tar xf linux-${KERNEL_VERSION}.tar.xz
               cd linux-${KERNEL_VERSION}
 
-              if [ -f "../vyos-build-kernel/x86_64_vyos_defconfig" ]; then
-                echo "Using VyOS defconfig..."
-                cp ../vyos-build-kernel/x86_64_vyos_defconfig .config
+              if [ -f "${DEFCONFIG_PATH}" ]; then
+                echo "Using VyOS defconfig from vyos-build..."
+                cp "${DEFCONFIG_PATH}" .config
+                make olddefconfig
+              elif [ -f "/vyos/packages/linux-kernel/x86_64_vyos_defconfig" ]; then
+                echo "Using VyOS x86_64 defconfig..."
+                cp /vyos/packages/linux-kernel/x86_64_vyos_defconfig .config
                 make olddefconfig
               else
-                echo "VyOS defconfig not found, using default..."
+                echo "VyOS defconfig not found, searching..."
+                find /vyos -name "*defconfig*" -type f 2>/dev/null | head -10 || true
+                echo "Using kernel default config..."
                 make defconfig
               fi
 
