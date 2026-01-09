@@ -8,6 +8,11 @@ on:
         required: true
         default: "current"
         type: string
+      kernel_version:
+        description: "Kernel version (e.g., 6.6.75)"
+        required: true
+        default: "6.6.75"
+        type: string
   pull_request:
     paths:
       - ".github/workflows/build-vyos.yml"
@@ -38,118 +43,100 @@ jobs:
         run: |
           cd vyos-build
           VERSION="${{ github.event.inputs.vyos_version || 'current' }}"
+          KERNEL_VERSION="${{ github.event.inputs.kernel_version || '6.6.75' }}"
 
           docker run --rm --privileged \
             -v $(pwd):/vyos \
             -w /vyos \
+            -e KERNEL_VERSION="$KERNEL_VERSION" \
             vyos/vyos-build:${VERSION} \
             bash -c '
               set -e
 
               echo "=== Building VyOS kernel with signed r8126 module ==="
+              echo "Kernel version: ${KERNEL_VERSION}"
 
-              # Go to linux-kernel build directory
-              cd /vyos/packages/linux-kernel
+              # Create work directory
+              WORK_DIR=/vyos/kernel-build
+              mkdir -p ${WORK_DIR}
+              cd ${WORK_DIR}
 
-              # Build the kernel first (this generates signing keys)
-              echo "=== Step 1: Building VyOS kernel ==="
+              # Step 1: Get VyOS kernel config
+              echo "=== Step 1: Getting VyOS kernel config ==="
+              git clone https://github.com/vyos/vyos-build-kernel.git || true
 
-              # Check if build-kernel.sh exists and use it, otherwise manual build
-              if [ -f "./build-kernel.sh" ]; then
-                echo "Using build-kernel.sh..."
-                ./build-kernel.sh
+              # Download kernel source
+              MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
+              echo "Downloading kernel ${KERNEL_VERSION}..."
+              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
+              tar xf linux-${KERNEL_VERSION}.tar.xz
+              cd linux-${KERNEL_VERSION}
+
+              # Apply VyOS config
+              if [ -f "../vyos-build-kernel/x86_64_vyos_defconfig" ]; then
+                echo "Using VyOS defconfig..."
+                cp ../vyos-build-kernel/x86_64_vyos_defconfig .config
+                make olddefconfig
               else
-                echo "Manual kernel build..."
-                # Clone vyos-build-kernel for config
-                git clone https://github.com/vyos/vyos-build-kernel.git || true
-
-                # Get kernel version from existing setup or default
-                KERNEL_VERSION=$(ls -d linux-* 2>/dev/null | head -1 | sed "s/linux-//" || echo "6.6.75")
-                echo "Kernel version: ${KERNEL_VERSION}"
-
-                # Download kernel if not exists
-                if [ ! -d "linux-${KERNEL_VERSION}" ] && [ ! -d "linux" ]; then
-                  MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
-                  curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
-                  tar xf linux-${KERNEL_VERSION}.tar.xz
-                  mv linux-${KERNEL_VERSION} linux
-                fi
-
-                cd linux
-
-                # Apply VyOS config
-                if [ -f "../vyos-build-kernel/x86_64_vyos_defconfig" ]; then
-                  cp ../vyos-build-kernel/x86_64_vyos_defconfig arch/x86/configs/
-                  make x86_64_vyos_defconfig
-                elif [ -f "../arch/x86/configs/vyos_defconfig" ]; then
-                  cp ../arch/x86/configs/vyos_defconfig arch/x86/configs/
-                  make vyos_defconfig
-                else
-                  make defconfig
-                fi
-
-                # Generate signing keys if not exist
-                if [ ! -f "certs/signing_key.pem" ]; then
-                  echo "Generating module signing keys..."
-                  mkdir -p certs
-                  cat > x509.genkey << EOF
-          [ req ]
-          default_bits = 4096
-          distinguished_name = req_distinguished_name
-          prompt = no
-          x509_extensions = v3_ca
-
-          [ req_distinguished_name ]
-          CN = VyOS Module Signing Key
-          emailAddress = build@vyos.local
-
-          [ v3_ca ]
-          basicConstraints=critical,CA:FALSE
-          keyUsage=digitalSignature
-          subjectKeyIdentifier=hash
-          authorityKeyIdentifier=keyid
-          EOF
-                  openssl req -new -nodes -utf8 -sha512 -days 36500 \
-                    -batch -x509 -config x509.genkey \
-                    -outform PEM -out certs/signing_key.pem \
-                    -keyout certs/signing_key.pem
-                fi
-
-                # Build kernel
-                make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
-
-                cd ..
+                echo "VyOS defconfig not found, using default..."
+                make defconfig
               fi
 
-              # Find the kernel build directory
-              KERNEL_DIR=$(find /vyos/packages/linux-kernel -maxdepth 1 -type d -name "linux*" | head -1)
-              if [ -z "$KERNEL_DIR" ]; then
-                KERNEL_DIR="/vyos/packages/linux-kernel/linux"
-              fi
-              echo "Kernel directory: ${KERNEL_DIR}"
+              # Step 2: Generate signing keys
+              echo "=== Step 2: Generating module signing keys ==="
+              mkdir -p certs
+              cat > x509.genkey << EOF
+[ req ]
+default_bits = 4096
+distinguished_name = req_distinguished_name
+prompt = no
+x509_extensions = v3_ca
 
-              # Verify signing key exists
-              if [ ! -f "${KERNEL_DIR}/certs/signing_key.pem" ]; then
-                echo "ERROR: Signing key not found!"
-                echo "Looking for signing key..."
-                find /vyos -name "signing_key*" 2>/dev/null || true
-                exit 1
-              fi
-              echo "Signing key found: ${KERNEL_DIR}/certs/signing_key.pem"
+[ req_distinguished_name ]
+CN = VyOS Module Signing Key
+emailAddress = build@vyos.local
 
-              # Build r8126 driver
-              echo "=== Step 2: Building r8126 driver ==="
+[ v3_ca ]
+basicConstraints=critical,CA:FALSE
+keyUsage=digitalSignature
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+EOF
+              openssl req -new -nodes -utf8 -sha512 -days 36500 \
+                -batch -x509 -config x509.genkey \
+                -outform PEM -out certs/signing_key.pem \
+                -keyout certs/signing_key.pem
+
+              # Update config to use the key
+              ./scripts/config --set-str MODULE_SIG_KEY "certs/signing_key.pem"
+              ./scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+              make olddefconfig
+
+              # Show MODULE_SIG settings
+              echo "MODULE_SIG settings:"
+              grep -E "MODULE_SIG|SYSTEM_TRUSTED" .config || true
+
+              # Step 3: Build kernel
+              echo "=== Step 3: Building kernel ==="
+              make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
+
+              # Move kernel debs to output
+              mkdir -p /vyos/output
+              mv ../*.deb /vyos/output/ || true
+
+              # Step 4: Build r8126 driver
+              echo "=== Step 4: Building r8126 driver ==="
               cd /tmp
               curl -L -o r8126.tar.bz2 https://github.com/openwrt/rtl8126/releases/download/10.016.00/r8126-10.016.00.tar.bz2
               tar xjf r8126.tar.bz2
               cd r8126-10.016.00/src
 
-              # Build against the VyOS kernel
-              echo "Building r8126 module..."
+              KERNEL_DIR=${WORK_DIR}/linux-${KERNEL_VERSION}
+              echo "Building r8126 module against ${KERNEL_DIR}..."
               make -C ${KERNEL_DIR} M=$(pwd) modules
 
-              # Sign the module with VyOS signing key
-              echo "=== Step 3: Signing r8126 module ==="
+              # Step 5: Sign the module
+              echo "=== Step 5: Signing r8126 module ==="
               ${KERNEL_DIR}/scripts/sign-file sha512 \
                 ${KERNEL_DIR}/certs/signing_key.pem \
                 ${KERNEL_DIR}/certs/signing_key.pem \
@@ -168,13 +155,7 @@ jobs:
               modinfo r8126.ko || true
 
               # Copy outputs
-              echo "=== Step 4: Collecting outputs ==="
-              mkdir -p /vyos/output
-
-              # Copy kernel debs
-              cp /vyos/packages/linux-kernel/*.deb /vyos/output/ 2>/dev/null || true
-
-              # Copy signed r8126.ko
+              echo "=== Step 6: Collecting outputs ==="
               cp r8126.ko /vyos/output/r8126-signed.ko
 
               # Save the signing key (public part only for verification)
