@@ -79,6 +79,30 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ---
 
+## ユーザーフレンドリーなコミュニケーション
+
+**重要**: 作業開始前・作業中に環境状態を明示すること。
+
+### 環境状態の表示
+
+作業を指示する前に、関連する全ての機器の状態を確認・表示する:
+
+```
+【現在の環境状態】
+- VyOS: [状態] (例: SSH接続中、設定モード等)
+- WXR: [モード] (ルーターモード/APモード)
+- 物理接続: [確認事項]
+- 関連サービス: [状態]
+```
+
+### 必須確認事項
+
+- **モード変更が必要な場合は事前に伝える**
+- **前提条件を明示する** (例: 「WXRがルーターモードである必要があります」)
+- **現在の状態と目標状態の差分を説明する**
+
+---
+
 ## Git操作ルール
 
 **重要**: ブランチ作成と移動はAI (Claude Code) の仕事。
@@ -181,3 +205,22 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - `scripts/recovery-vyos-config.sh` - 復旧手順表示スクリプト
 - `scripts/backup-vyos-config.txt` - 設定バックアップ
 - [docs/phase6-backup.md](docs/phase6-backup.md) - 災害復旧手順
+
+---
+
+## VyOS構文メモ (バージョン依存)
+
+### DHCPv4サーバー設定 (VyOS 1.4+)
+
+```bash
+# subnet-id が必須
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 subnet-id 1
+
+# オプションは "option" の下に配置
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 option default-router 192.168.1.1
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 option name-server 8.8.8.8
+
+# 旧構文 (動作しない)
+# set service dhcp-server ... default-router 192.168.1.1  ← NG
+# set service dhcp-server ... name-server 8.8.8.8        ← NG
+```
