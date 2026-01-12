@@ -4,6 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+# ⚠️ 最重要: セッション開始時の必須アクション
+
+**Claude Code 起動直後、作業開始前に必ず以下を実行すること:**
+
+1. **この CLAUDE.md を最後まで読む**
+2. **`docs/` ディレクトリ内のドキュメントを確認する**
+   - 特に `docs/reference.md` (機器情報、MACアドレス一覧、環境情報)
+   - **`docs/hardware-specs.md`** (使用機材の詳細スペック、ポート数、対応速度)
+   - 関連する phase ドキュメント
+   - トラブルシューティング履歴
+3. **過去の失敗パターンを確認する** (`docs/troubleshooting-*.md`, `docs/failure-log-*.md`)
+4. **使用機材について質問する前に `docs/hardware-specs.md` を確認する**
+   - WebSearchやユーザーに確認する前に**必ず**このファイルを読む
+   - MACアドレス、ポート数、対応速度、物理接続図が記載されている
+
+**なぜ重要か**: このプロジェクトは複雑なネットワーク構成を扱う。MACアドレスの取り違え、機器の役割の誤解など、ドキュメントを読めば防げるミスで何時間も無駄にした実績がある。**推測で作業するな。ドキュメントを読め。**
+
+---
+
 # BIGLOBE + MAP-E + 10Gbps 自作ルーター構築プロジェクト
 
 ## プロジェクト概要
@@ -205,6 +224,38 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - `scripts/recovery-vyos-config.sh` - 復旧手順表示スクリプト
 - `scripts/backup-vyos-config.txt` - 設定バックアップ
 - [docs/phase6-backup.md](docs/phase6-backup.md) - 災害復旧手順
+
+---
+
+## VyOS コマンド注意事項
+
+### VyOS と Linux の違い
+
+VyOSはDebianベースだが、一部コマンドの構文が異なる:
+
+```bash
+# ping (VyOSでは -c オプションなし)
+ping 8.8.8.8 count 3        # VyOS構文
+# ping -c 3 8.8.8.8         # Linux構文 (VyOSでは動作しない)
+
+# tcpdump (sudo必須、フィルタはシングルクォート)
+sudo tcpdump -i eth1 -n 'ip6 proto 4'
+```
+
+### コマンド指示時の必須ルール
+
+1. **関連コマンドは全て一度に提示する** (例: tcpdump + ping を同時に)
+2. **ターミナル2つ必要な場合は明示する**
+3. **VyOS固有の構文を使う** (上記参照)
+4. **暫定対応か恒久対応かを必ず明示する**
+   - **暫定対応**: 再起動で消える、一時的な検証用
+   - **恒久対応**: 永続化される、本番運用向け
+   - 例: 「これは**暫定対応**です。再起動で消えます。」
+
+### 選択肢提示時の必須ルール
+
+複数の選択肢を提示する際は、**必ずメリット・デメリットを両方記載する**。
+一方的な推奨や、メリットだけ/デメリットだけの説明は禁止。
 
 ---
 
