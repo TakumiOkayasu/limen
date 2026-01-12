@@ -27,24 +27,54 @@ save
 
 ## タスク2-2: LAN側RA配布設定
 
-**目的**: LANクライアントにIPv6アドレスを自動配布
+**目的**: LANクライアントにIPv6アドレスを自動配布 (SLAAC)
 
 **VyOSコマンド**:
 ```
 configure
 
-set service router-advert interface eth2 prefix ::/64
-set service router-advert interface eth2 name-server <IPv6 DNS>
+# eth2 (LAN) でRA配布を有効化
+# プレフィックスはDHCPv6-PDで取得した /56 から sla-id 1 で割り当てられた /64
+set service router-advert interface eth2 prefix 2404:7a82:4d02:4101::/64
+
+# DNSサーバー (Cloudflare + Google)
+set service router-advert interface eth2 name-server 2606:4700:4700::1111
+set service router-advert interface eth2 name-server 2606:4700:4700::1001
+set service router-advert interface eth2 name-server 2001:4860:4860::8888
 
 commit
 save
 ```
 
-**注意点**:
-- **RAは自作ルーターのみが配布**
-- **WXR側LANには絶対にRAを出させない**
+**確認コマンド**:
+```bash
+# VyOSでRA設定を確認
+show configuration commands | grep router-advert
 
-**完了条件**: クライアントがIPv6取得、外部IPv6サイトにアクセス可能
+# クライアント側でIPv6アドレス取得を確認
+# [Mac] ifconfig en0 | grep inet6
+# → 2404:7a82:4d02:4101:... のアドレスが表示されればOK
+
+# クライアント側でIPv6疎通確認
+# [Mac] ping6 -c 3 2606:4700:4700::1111
+# [Mac] curl -6 https://ifconfig.me
+```
+
+**注意点**:
+- **RAは自作ルーターのみが配布** - WXRのRA配布は必ずOFFにする
+- **WXR側LANには絶対にRAを出させない** - 干渉するとクライアントがWXRをデフォルトGWと認識してしまう
+- プレフィックスは固定値ではなくDHCPv6-PDで取得したものを使う (BIGLOBEでは `2404:7a82:4d02:41XX::/64` の形式)
+
+**トラブルシューティング**:
+- クライアントがIPv6を取得できない場合:
+  1. `show configuration commands | grep router-advert` で設定確認
+  2. クライアント側で `ndp -rn` (Mac) でRAの送信元を確認
+  3. WXRからRAが来ている場合はWXR側でRA配布をOFFに
+
+**完了条件**:
+- [x] クライアントがグローバルIPv6アドレスを取得 (`2404:7a82:4d02:4101:...`)
+- [x] `ping6 2606:4700:4700::1111` が成功
+- [x] `curl -6 https://ifconfig.me` でVyOS配下のIPv6アドレスが表示される
 
 ---
 
