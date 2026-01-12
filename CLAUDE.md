@@ -215,6 +215,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 - [IPv6疎通問題](docs/troubleshooting-ipv6.md) - チェックリスト、過去の失敗パターン、VyOS制約
 - [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - DUID-LL形式が必須
+- [RA設定消失](docs/troubleshooting-ra-missing.md) - クライアントがIPv6取得できない場合の診断手順
 - [カーネル更新失敗](docs/failure-log-2026-01-07-kernel-update.md) - MODULE_SIG_FORCE問題
 
 ---
