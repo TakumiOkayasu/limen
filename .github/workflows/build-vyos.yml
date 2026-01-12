@@ -9,9 +9,9 @@ on:
         default: "current"
         type: string
       kernel_version:
-        description: "Kernel version (e.g., 6.6.75)"
+        description: "Kernel version (e.g., 6.6.117)"
         required: true
-        default: "6.6.75"
+        default: "6.6.117"
         type: string
   pull_request:
     paths:
@@ -43,7 +43,7 @@ jobs:
         run: |
           cd vyos-build
           VERSION="${{ github.event.inputs.vyos_version || 'current' }}"
-          KERNEL_VERSION="${{ github.event.inputs.kernel_version || '6.6.75' }}"
+          KERNEL_VERSION="${{ github.event.inputs.kernel_version || '6.6.117' }}"
 
           docker run --rm --privileged \
             -v $(pwd):/vyos \
