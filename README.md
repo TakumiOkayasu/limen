@@ -4,12 +4,13 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 
 ## 現在の状態
 
-| 項目 | 状態 |
-|------|------|
-| IPv6 | 稼働中 (10Gbps) |
-| IPv4 | 稼働中 (WXR経由MAP-E, 1Gbps) |
-| WireGuard VPN | 未実装 |
-| RTL8126 (5GbE) | 未使用 (カーネルモジュール署名問題) |
+| 項目 | 状態 | 備考 |
+|------|------|------|
+| IPv6 | **稼働中** | 10Gbps (ONU直結) |
+| IPv4 | **稼働中** | WXR経由MAP-E (1Gbps) |
+| WireGuard VPN | **稼働中** | 外部からVyOSにSSH可能 |
+| Cloudflare DDNS | **稼働中** | router.murata-lab.net |
+| RTL8126 (5GbE) | 未使用 | カーネルモジュール署名問題 |
 
 ## 設計思想
 
@@ -54,6 +55,24 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 | IPv6 | LAN → VyOS → ONU → NGN | 10Gbps |
 | IPv4 | LAN → VyOS → WXR → MAP-E | 1Gbps |
 
+## WireGuard VPN
+
+外部ネットワークからVyOSに安全にアクセスするためのVPN。
+
+| 項目 | 値 |
+|------|-----|
+| サーバーアドレス | 10.10.10.1/24, fd00:10:10:10::1/64 |
+| ポート | 51820 (UDP/IPv6) |
+| Endpoint | router.murata-lab.net:51820 |
+
+### アクセス制限
+
+- VPNクライアント → VyOS: **許可**
+- VPNクライアント → LAN: **禁止**
+- VPNクライアント → インターネット: **禁止**
+
+踏み台として使用されることを防ぐため、VPNからはVyOSのみにアクセス可能。
+
 ## ドキュメント
 
 ### 実装ガイド
@@ -63,19 +82,21 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 | [Phase 0](docs/phase0-install.md) | VyOSインストール | 完了 |
 | [Phase 1](docs/phase1-ssh.md) | SSH設定 | 完了 |
 | [Phase 2](docs/phase2-ipv6.md) | IPv6基盤 (RA/DHCPv6-PD) | 完了 |
-| [Phase 3](docs/phase3-wireguard.md) | WireGuard VPN | 未着手 |
+| [Phase 3](docs/phase3-wireguard.md) | WireGuard VPN | 完了 |
 | [Phase 4](docs/phase4-wxr-routing.md) | WXR隔離・IPv4ルーティング | 完了 |
-| [Phase 5](docs/phase5-operations.md) | 運用設定 | 未着手 |
-| [Phase 6](docs/phase6-backup.md) | バックアップ | 一部完了 |
+| [Phase 5](docs/phase5-operations.md) | 運用設定 (DDNS, ログ) | 完了 |
+| [Phase 6](docs/phase6-backup.md) | バックアップ | 完了 |
 
 ### リファレンス
 
 - [reference.md](docs/reference.md) - VyOS操作、FWルール、環境情報
+- [hardware-specs.md](docs/hardware-specs.md) - 機材詳細スペック、MACアドレス
 
 ### トラブルシューティング
 
 - [troubleshooting-ipv6.md](docs/troubleshooting-ipv6.md) - IPv6疎通問題
 - [troubleshooting-dhcpv6-pd.md](docs/troubleshooting-dhcpv6-pd.md) - DHCPv6-PD取得 (DUID-LL必須)
+- [troubleshooting-ra-missing.md](docs/troubleshooting-ra-missing.md) - RA設定消失
 - [failure-log-2026-01-07-kernel-update.md](docs/failure-log-2026-01-07-kernel-update.md) - カーネル更新失敗記録
 
 ## CI/CD
@@ -84,21 +105,28 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 |-------------|------|
 | build-vyos.yml | VyOSカーネル + 署名済みr8126モジュールのビルド |
 | ci-auto-fix.yml | CI失敗時の自動修正PR作成 |
+| dependabot-auto-merge.yml | Dependabot PRの自動マージ |
 
-## 既知の問題
+## 既知の問題と対応状況
 
-### X540-T2 オーバーヒート
+### X540-T2 オーバーヒート (解決済み)
 
 Intel X540-T2は発熱が大きく、ヒートシンクなしで長時間稼働するとオーバーヒートで停止する。
 
-**対策** (TODO):
-- ヒートシンク追加 (40x40mm程度)
-- エアフロー改善
+**対応**: ヒートシンク (40x40mm) を取り付け済み。安定稼働中。
 
-### RTL8126 モジュール署名
+### RTL8126 モジュール署名 (対応中)
 
-VyOSはMODULE_SIG_FORCE=yでビルドされており、署名なしモジュールをロードできない。CIで署名済みモジュールをビルド中。
+VyOSはMODULE_SIG_FORCE=yでビルドされており、署名なしモジュールをロードできない。
 
-## 注意
+**対応**: CIで署名済みモジュールをビルド中。将来的にeth0 (1GbE) を5GbEに置き換え予定。
 
-このリポジトリには機密情報 (APIトークン、秘密鍵等) を含めないでください。
+## セキュリティ
+
+- このリポジトリには機密情報 (APIトークン、秘密鍵等) を含めない
+- WireGuard鍵は `~/.wireguard/` にローカル保存
+- Cloudflare APIトークンはVyOS設定内に保存 (リポジトリ外)
+
+## ライセンス
+
+このプロジェクトは個人利用を目的としています。
