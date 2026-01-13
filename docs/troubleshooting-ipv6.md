@@ -112,3 +112,77 @@ sudo rdisc6 eth1
 - **PPPoE接続不可**: 10ギガプラン(ファミリー10ギガタイプ)ではPPPoE接続は対象外
 - **IPv6オプションのみ**: IPoE + MAP-E相当の方式でのみIPv4接続可能
 - **DHCPv6-PD競合**: NGNは/56を1つしか払い出さないため、VyOSとWXRで競合する
+
+---
+
+## IPv4 over MAP-E のMTU/MSS問題
+
+### 症状
+
+- `git push` (HTTPS) で `SSL connection timeout` が頻発
+- `ping -D -s 1472 github.com` で `frag needed and DF set (MTU 1452)` が返る
+- SSH (IPv6) は正常だがHTTPS (IPv4) だけ不安定
+
+### 原因
+
+MAP-Eトンネル (IPv4 over IPv6) のカプセル化オーバーヘッドでMTUが減少。
+Path MTU Discovery (PMTUD) が正しく動作しないと、SSL/TLSハンドシェイクの大きなパケットがタイムアウトする。
+
+### 解決策: MSS Clamping
+
+**[VyOS 2024.x / 2026.x]** インターフェースレベルでMSS調整:
+
+```bash
+configure
+set interfaces ethernet eth0 ip adjust-mss clamp-mss-to-pmtu
+commit
+save
+```
+
+- `eth0`: WXR (MAP-E) 向けインターフェース
+- `clamp-mss-to-pmtu`: PMTUに基づいてTCP MSSを自動調整
+
+### 動作しない構文 (VyOS 2024+)
+
+以下の構文は**古いVyOSの構文**であり、VyOS 2024.x以降では使えない:
+
+```bash
+# NG: firewall options は存在しない
+set firewall options interface eth0 adjust-mss clamp-mss-to-pmtu
+
+# NG: policy route でMSS設定 + interfaceへの適用ができない
+set policy route MSS-CLAMP rule 10 set tcp-mss 1412
+set interfaces ethernet eth0 policy route MSS-CLAMP
+```
+
+### 確認方法
+
+設定後、Macから以下を実行:
+
+```bash
+# MTU問題が解消されたか確認
+curl -4 -v https://github.com 2>&1 | grep -E "(Connected|SSL)"
+
+# pingでフラグメント確認 (エラーが出なくなるはず)
+ping -c 3 -D -s 1400 github.com
+```
+
+### 補足: GitHubはIPv6非対応
+
+GitHubはHTTPS接続にIPv6アドレスを提供していない:
+
+```bash
+dig AAAA github.com  # 結果なし
+```
+
+| 方式 | プロトコル | IPv6対応 |
+|------|-----------|----------|
+| HTTPS + トークン | TCP/443 | IPv4のみ |
+| SSH + 鍵認証 | TCP/22 | **IPv6対応** |
+| `gh` CLI | HTTPS | IPv4のみ |
+
+**推奨**: 普段の `git push/pull` はSSHに切り替え、IPv6で高速通信:
+
+```bash
+git remote set-url origin git@github.com:USER/REPO.git
+```
