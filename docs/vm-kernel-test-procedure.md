@@ -251,35 +251,220 @@ ssh vyos@<本番IP> "uname -r; sudo nft list tables"
 ### パターン C: 段階的適用 (最も安全)
 
 新カーネルを別ブートエントリとして追加し、GRUBで選択可能にする。
+既存のカーネルはそのまま残るため、失敗しても再起動で元に戻せる。
 
-**メリット**: 失敗しても再起動で元のカーネルに戻せる
+**メリット**:
+- 失敗しても再起動でGRUBメニューから元のエントリを選択可能
+- 本番環境を壊すリスクが最小限
+- 物理コンソールがあれば確実に復旧できる
 
-**適用手順**:
+**デメリット**:
+- GRUBメニューで手動選択が必要 (デフォルトは元のカーネル)
+- 物理コンソールまたはPiKVM等のリモートコンソールが必須
+
+**前提条件**:
+- 物理コンソール (モニター + キーボード) またはPiKVM等でGRUB操作が可能
+
+---
+
+#### 手順1: ファイル転送
+
+**[Mac]**
 
 ```bash
-# 1. ファイル転送・インストール (パターンA/Bと同じ)
-scp -r vyos-kernel-packages vyos@<本番IP>:/config/
-ssh vyos@<本番IP>
+# 本番VyOSにカーネルパッケージを転送
+scp -r vyos-kernel-packages vyos@192.168.1.1:/config/
+```
+
+---
+
+#### 手順2: SSH接続してカーネルをインストール
+
+**[Mac]**
+
+```bash
+ssh vyos@192.168.1.1
+```
+
+**[本番VyOS]**
+
+```bash
+# カーネルパッケージをインストール
 cd /config/vyos-kernel-packages
 sudo dpkg -i linux-*.deb
 
-# 2. GRUBエントリを追加 (既存カーネルは残す)
-sudo tee /boot/grub/grub.cfg.d/vyos-versions/99-custom-kernel.cfg << 'GRUB'
-menuentry "6.6.117-vyos with r8126 (TEST)" --id custom-kernel-test {
-    linux /boot/vmlinuz-6.6.117-vyos boot=live rootdelay=5 noautologin net.ifnames=0 biosdevname=0 vyos-union=/boot/<現在のバージョン> console=tty0
+# GRUBエラーは無視してOK:
+# "dpkg: error processing package linux-image-6.6.117-vyos"
+# "failed to get canonical path of 'overlay'"
+# カーネルファイル自体は正常にインストールされている
+```
+
+---
+
+#### 手順3: 現在のブートパラメータを確認
+
+**[本番VyOS]**
+
+```bash
+# 現在のvyos-unionパスを確認 (この値をGRUBエントリで使用する)
+cat /proc/cmdline
+```
+
+出力例:
+```
+BOOT_IMAGE=/boot/2026.01.06-0022-rolling/vmlinuz boot=live rootdelay=5 noautologin net.ifnames=0 biosdevname=0 vyos-union=/boot/2026.01.06-0022-rolling console=tty0
+```
+
+**重要**: `vyos-union=/boot/2026.01.06-0022-rolling` の部分をメモする。
+この値は環境によって異なる (バージョン番号部分)。
+
+---
+
+#### 手順4: GRUBエントリを作成
+
+**[本番VyOS]**
+
+```bash
+# 新カーネルとinitrdが存在することを確認
+ls -la /boot/vmlinuz-6.6.117-vyos /boot/initrd.img-6.6.117-vyos
+
+# vyos-unionパスを自動取得
+VYOS_UNION=$(cat /proc/cmdline | grep -o 'vyos-union=/boot/[^ ]*' | cut -d= -f2)
+echo "取得したパス: ${VYOS_UNION}"
+# 出力例: 取得したパス: /boot/2026.01.06-0022-rolling
+
+# パスが正しく取得できたことを確認してからGRUBエントリを作成
+sudo tee /boot/grub/grub.cfg.d/vyos-versions/99-r8126-custom-kernel.cfg << EOF
+menuentry "VyOS 6.6.117 Custom Kernel (r8126 support)" --id r8126-custom-kernel {
+    linux /boot/vmlinuz-6.6.117-vyos boot=live rootdelay=5 noautologin net.ifnames=0 biosdevname=0 vyos-union=${VYOS_UNION} console=tty0
     initrd /boot/initrd.img-6.6.117-vyos
 }
-GRUB
+EOF
 
-# 3. 再起動してGRUBメニューで "6.6.117-vyos with r8126 (TEST)" を選択
+# 作成結果を確認 (vyos-union= に正しいパスが入っていることを確認)
+cat /boot/grub/grub.cfg.d/vyos-versions/99-r8126-custom-kernel.cfg
+```
+
+---
+
+#### 手順5: GRUBメニューの順番を確認
+
+**[本番VyOS]**
+
+```bash
+# GRUBエントリのファイル一覧 (辞書順で読み込まれる)
+ls -la /boot/grub/grub.cfg.d/vyos-versions/
+```
+
+出力例:
+```
+-rw-r--r-- 1 root root  XXX Jan XX XX:XX 2026.01.06-0022-rolling.cfg
+-rw-r--r-- 1 root root  XXX Jan XX XX:XX 99-r8126-custom-kernel.cfg
+```
+
+`99-` で始まるファイルは最後に読み込まれるため、GRUBメニューの下の方に表示される。
+
+**メニューの一番上に表示したい場合**:
+```bash
+sudo mv /boot/grub/grub.cfg.d/vyos-versions/99-r8126-custom-kernel.cfg \
+        /boot/grub/grub.cfg.d/vyos-versions/01-r8126-custom-kernel.cfg
+```
+
+---
+
+#### 手順6: 再起動してカスタムカーネルを選択
+
+**[本番VyOS]**
+
+```bash
 sudo reboot
 ```
 
-**注意**: `vyos-union=/boot/<現在のバージョン>` は実際のパスに置き換える。
-確認方法: `cat /proc/cmdline | grep vyos-union`
+**[物理コンソール または PiKVM]**
 
-**成功したら**: vmlinuzを置き換えてデフォルト化
-**失敗したら**: 再起動してGRUBで元のエントリを選択
+1. 再起動後、GRUBメニューが表示される (5秒のタイムアウト)
+2. 矢印キーで「VyOS 6.6.117 Custom Kernel (r8126 support)」を選択
+3. Enterキーで起動
+
+---
+
+#### 手順7: 起動後の検証
+
+**[本番VyOS]** (SSH または コンソール)
+
+```bash
+# カーネルバージョンを確認
+uname -r
+# 期待値: 6.6.117-vyos
+
+# nftablesが動作するか確認 (最重要)
+sudo nft list tables
+# テーブル一覧が表示されればOK
+# エラー "Protocol not supported" が出たら失敗
+
+# VyOS設定システムが動作するか確認
+configure
+commit
+exit
+# "No configuration changes to commit" と表示されればOK
+
+# ネットワークインターフェースの確認
+ip a
+# eth0, eth1, eth2 が認識されていることを確認
+
+# r8126モジュールの確認 (将来用、現時点では未ロード)
+modinfo r8126 2>/dev/null || echo "r8126 module not installed yet"
+```
+
+---
+
+#### 手順8: 成功した場合 - デフォルト化
+
+検証が成功したら、カスタムカーネルをデフォルトにする。
+
+**[本番VyOS]**
+
+```bash
+# 現在のカーネルをバックアップ
+sudo cp /boot/vmlinuz /boot/vmlinuz.original
+sudo cp /boot/initrd.img /boot/initrd.img.original
+
+# カスタムカーネルをデフォルトに設定
+sudo cp /boot/vmlinuz-6.6.117-vyos /boot/vmlinuz
+sudo cp /boot/initrd.img-6.6.117-vyos /boot/initrd.img
+
+# GRUBエントリを削除 (元のエントリがカスタムカーネルを使うようになったため不要)
+sudo rm /boot/grub/grub.cfg.d/vyos-versions/*-r8126-custom-kernel.cfg
+
+# 再起動して確認
+sudo reboot
+```
+
+---
+
+#### 手順9: 失敗した場合 - ロールバック
+
+カスタムカーネルで問題が発生した場合。
+
+**方法A: SSH接続可能な場合**
+
+```bash
+# GRUBエントリを削除
+sudo rm /boot/grub/grub.cfg.d/vyos-versions/*-r8126-custom-kernel.cfg
+sudo reboot
+```
+
+**方法B: SSH不可、物理コンソールからGRUB選択**
+
+1. 再起動
+2. GRUBメニューで元のエントリ「2026.01.06-0022-rolling」を選択
+3. 起動後、上記の方法Aを実行
+
+**方法C: GRUBメニューも表示されない場合**
+
+1. 電源長押しで強制再起動
+2. 起動時にShiftキーを押し続けてGRUBメニューを表示
+3. 元のエントリを選択
 
 ---
 
