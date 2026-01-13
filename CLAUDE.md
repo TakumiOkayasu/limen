@@ -164,10 +164,18 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### Phase 3: WireGuard VPN
 → [docs/phase3-wireguard.md](docs/phase3-wireguard.md)
 
-- [ ] 3-1: WireGuard鍵生成・インターフェース作成
-- [ ] 3-2: WireGuardファイアウォール許可（rate limit含む）
-- [ ] 3-3: VPNアクセス制限
-- [ ] 3-4: WireGuardクライアント設定
+- [x] 3-1: WireGuard鍵生成・インターフェース作成 (2026-01-13完了)
+  - wg0: 10.10.10.1/24, fd00:10:10:10::1/64
+  - ポート: 51820
+- [x] 3-2: WireGuardファイアウォール許可 (2026-01-13完了)
+  - input filter rule 40: rate limit (10/min)
+  - input filter rule 50: UDP 51820許可
+- [x] 3-3: VPNアクセス制限 (2026-01-13完了)
+  - forward filter rule 90/91: VPN→LAN/WAN禁止
+  - VPNクライアントはVyOSのみアクセス可能
+- [x] 3-4: WireGuardクライアント設定 (2026-01-13完了)
+  - Mac: 10.10.10.2
+  - iPhone: 10.10.10.3
 
 ### Phase 4: WXR隔離・IPv4ルーティング
 → [docs/phase4-wxr-routing.md](docs/phase4-wxr-routing.md)
@@ -187,8 +195,11 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 ### Phase 5: 運用設定
 → [docs/phase5-operations.md](docs/phase5-operations.md)
 
-- [ ] 5-1: Cloudflare DDNS設定
-- [ ] 5-2: ファイアウォールログ設定
+- [x] 5-1: Cloudflare DDNS設定 (2026-01-13完了)
+  - router.murata-lab.net → IPv6自動更新
+  - eth1のIPv6アドレスを使用
+- [x] 5-2: ファイアウォールログ設定 (2026-01-13完了)
+  - input/forward filter default-log有効
 
 ### Phase 6: バックアップ体制
 → [docs/phase6-backup.md](docs/phase6-backup.md)
@@ -196,7 +207,8 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - [x] 6-1: VyOS設定バックアップ (完了)
   - 日次自動バックアップ: /config/scripts/backup.sh (毎日3:00)
   - 手動バックアップ: /config/backup-YYYYMMDD.txt
-- [ ] 6-2: WireGuard鍵バックアップ
+- [x] 6-2: WireGuard鍵バックアップ (2026-01-13完了)
+  - Mac: ~/.wireguard/ に全鍵を保存
 
 ---
 
