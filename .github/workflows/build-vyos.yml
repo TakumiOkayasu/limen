@@ -97,9 +97,11 @@ jobs:
                 -outform PEM -out certs/signing_key.pem \
                 -keyout certs/signing_key.pem
 
-              # Set signing key path (VyOS defconfig already has MODULE_SIG=y)
+              # Set signing key path and ensure all modules are signed
               ./scripts/config --set-str MODULE_SIG_KEY "certs/signing_key.pem"
               ./scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+              # Ensure MODULE_SIG_ALL=y so all modules (including =m) are signed during build
+              ./scripts/config --enable MODULE_SIG_ALL
               make olddefconfig
 
               echo "=== Verifying MODULE_SIG settings ==="
@@ -108,10 +110,44 @@ jobs:
                 echo "ERROR: CONFIG_MODULE_SIG is not enabled!"
                 exit 1
               fi
-              echo "MODULE_SIG is properly configured."
+              if ! grep -q "CONFIG_MODULE_SIG_ALL=y" .config; then
+                echo "ERROR: CONFIG_MODULE_SIG_ALL is not enabled - loadable modules will not be signed!"
+                exit 1
+              fi
+              echo "MODULE_SIG is properly configured (including MODULE_SIG_ALL)."
+
+              echo "=== Verifying critical VyOS kernel options ==="
+              echo "Checking nftables support..."
+              REQUIRED_OPTS="
+                CONFIG_NETFILTER=y
+                CONFIG_NF_TABLES
+                CONFIG_NF_CONNTRACK
+                CONFIG_NF_NAT
+                CONFIG_NFT_NAT
+                CONFIG_NFT_MASQ
+                CONFIG_NFT_CT
+                CONFIG_NETFILTER_XTABLES
+              "
+              MISSING=""
+              for opt in $REQUIRED_OPTS; do
+                base_opt=$(echo "$opt" | cut -d= -f1)
+                if ! grep -q "^${base_opt}=" .config; then
+                  echo "WARNING: ${base_opt} not found in config"
+                  MISSING="${MISSING} ${base_opt}"
+                else
+                  grep "^${base_opt}=" .config
+                fi
+              done
+              if [ -n "$MISSING" ]; then
+                echo "ERROR: Missing critical options:${MISSING}"
+                echo "These are required for VyOS firewall/NAT to work"
+                exit 1
+              fi
+              echo "All critical VyOS kernel options are present."
 
               echo "=== Step 3: Building kernel ==="
-              make -j$(nproc) bindeb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
+              # Use deb-pkg to include modules (not just bindeb-pkg)
+              make -j$(nproc) deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
 
               mkdir -p /vyos/output
               mv ../*.deb /vyos/output/ || true
@@ -154,6 +190,17 @@ jobs:
               echo "=== Verification ==="
               echo "MODULE_SIG settings in kernel:"
               grep -E "MODULE_SIG" /vyos/output/kernel-config | head -10
+
+              echo ""
+              echo "=== Verifying nftables modules in kernel package ==="
+              echo "Checking critical kernel options are set:"
+              grep -E "^CONFIG_NF_TABLES=" /vyos/output/kernel-config
+              grep -E "^CONFIG_NETFILTER=" /vyos/output/kernel-config
+              grep -E "^CONFIG_NFT_" /vyos/output/kernel-config | head -20
+
+              echo ""
+              echo "=== Listing generated deb packages ==="
+              ls -la /vyos/output/*.deb
             '
 
       - name: Verify outputs
@@ -173,6 +220,27 @@ jobs:
           echo ""
           echo "=== MODULE_SIG settings ==="
           grep -E "MODULE_SIG" vyos-build/output/kernel-config || true
+
+          echo ""
+          echo "=== Verifying nftables support in kernel config ==="
+          if grep -q "^CONFIG_NF_TABLES=m" vyos-build/output/kernel-config || \
+             grep -q "^CONFIG_NF_TABLES=y" vyos-build/output/kernel-config; then
+            echo "SUCCESS: nftables support is enabled"
+            grep "^CONFIG_NF_TABLES=" vyos-build/output/kernel-config
+          else
+            echo "ERROR: nftables support is NOT enabled - VyOS firewall will not work!"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Checking for critical netfilter modules ==="
+          for opt in CONFIG_NETFILTER CONFIG_NF_CONNTRACK CONFIG_NF_NAT; do
+            if grep -q "^${opt}=" vyos-build/output/kernel-config; then
+              grep "^${opt}=" vyos-build/output/kernel-config
+            else
+              echo "WARNING: ${opt} not found"
+            fi
+          done
 
       - name: Upload kernel packages
         uses: actions/upload-artifact@v6
