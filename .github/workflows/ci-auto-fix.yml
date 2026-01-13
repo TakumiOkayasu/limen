@@ -86,10 +86,18 @@ jobs:
           RESPONSE=$(cat /tmp/claude_response.txt)
 
           if echo "$RESPONSE" | grep -qF -- "---FIX_START---"; then
-            echo "Fix detected, applying..."
+            echo "Fix detected, analyzing..."
 
             # ファイルパスを抽出
             FILE_PATH=$(echo "$RESPONSE" | sed -n 's/ファイルパス: \(.*\)/\1/p' | tr -d ' ')
+
+            # ワークフローファイルの修正はGITHUB_TOKENでは権限不足のためスキップ
+            if echo "$FILE_PATH" | grep -q "^\.github/workflows/"; then
+              echo "::warning::Workflow file modification detected ($FILE_PATH). Skipping auto-fix due to GITHUB_TOKEN permission limitations."
+              echo "::notice::To fix workflow files, please create a PR manually or use a PAT with 'workflow' scope."
+              echo "has_fix=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
 
             # 修正内容を抽出
             echo "$RESPONSE" | sed -n '/---CONTENT_START---/,/---CONTENT_END---/p' | \

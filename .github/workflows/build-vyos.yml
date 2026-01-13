@@ -146,6 +146,14 @@ jobs:
               echo "All critical VyOS kernel options are present."
 
               echo "=== Step 3: Building kernel ==="
+              # Initialize git repository (required for deb-pkg)
+              # deb-pkg requires git to determine version info
+              git init
+              git config user.email "build@vyos.local"
+              git config user.name "VyOS Kernel Builder"
+              git add -A
+              git commit -m "Initial commit for kernel build"
+
               # Use deb-pkg to include modules (not just bindeb-pkg)
               make -j$(nproc) deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
 
