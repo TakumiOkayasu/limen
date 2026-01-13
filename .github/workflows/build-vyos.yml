@@ -155,7 +155,8 @@ jobs:
               git commit -m "Initial commit for kernel build"
 
               # Use deb-pkg to include modules (not just bindeb-pkg)
-              make -j$(nproc) deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1
+              # Note: KDEB_PKGVERSION must include revision (e.g., 1-1) for quilt format
+              make -j$(nproc) deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1-1
 
               mkdir -p /vyos/output
               mv ../*.deb /vyos/output/ || true
