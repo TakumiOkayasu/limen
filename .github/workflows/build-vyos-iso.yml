@@ -165,5 +165,5 @@ jobs:
   on-failure:
     if: failure()
     needs: [build-iso]
-    uses: ./.github/workflows/on-failure.yml
+    uses: ./.github/reusable-workflows/on-failure.yml
     secrets: inherit
