@@ -92,6 +92,26 @@ jobs:
           restore-keys: |
             vyos-build-${{ steps.vars.outputs.branch }}-
 
+      - name: Cache kernel source
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: kernel-cache
+          key: kernel-src-${{ steps.vars.outputs.kernel_version }}
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ccache-cache
+          key: ccache-${{ steps.vars.outputs.kernel_version }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ steps.vars.outputs.kernel_version }}-
+            ccache-
+
+      - name: Prepare cache directories
+        run: |
+          mkdir -p kernel-cache ccache-cache
+
       - name: Clone vyos-build repository
         if: steps.cache-vyos-build.outputs.cache-hit != 'true'
         run: |
@@ -143,10 +163,13 @@ jobs:
           # カーネルとr8126を同じ署名キーでビルドし、ISOに含める
           docker run --rm --privileged \
             -v "$(pwd):/vyos" \
+            -v "${{ github.workspace }}/kernel-cache:/kernel-cache" \
+            -v "${{ github.workspace }}/ccache-cache:/ccache" \
             -w /vyos \
             -e VYOS_VERSION="${VERSION}" \
             -e KERNEL_VERSION="${KERNEL_VERSION}" \
             -e BUILD_TYPE="${BUILD_TYPE}" \
+            -e CCACHE_DIR="/ccache" \
             "vyos/vyos-build:${BRANCH}" \
             bash -c '
               set -e
@@ -155,10 +178,16 @@ jobs:
               echo "=== Phase 1: Build Custom Kernel ==="
               echo "============================================="
 
-              # Install build dependencies
+              # Install build dependencies with ccache
               sudo apt-get update
               sudo apt-get install -y curl flex bison bc libssl-dev libelf-dev \
-                libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev
+                libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev ccache
+
+              # Setup ccache
+              export PATH="/usr/lib/ccache:$PATH"
+              export CCACHE_DIR="/ccache"
+              export CCACHE_MAXSIZE="2G"
+              ccache -s || true
 
               WORK_DIR=/vyos/kernel-build
               mkdir -p ${WORK_DIR}
@@ -168,9 +197,19 @@ jobs:
               DEFCONFIG_PATH="/vyos/scripts/package-build/linux-kernel/arch/x86/configs/vyos_defconfig"
 
               MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
-              echo "Downloading kernel ${KERNEL_VERSION}..."
-              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
-              tar xf linux-${KERNEL_VERSION}.tar.xz
+
+              # Use cached kernel source if available
+              KERNEL_TARBALL="linux-${KERNEL_VERSION}.tar.xz"
+              if [ -f "/kernel-cache/${KERNEL_TARBALL}" ]; then
+                echo "Using cached kernel source..."
+                cp "/kernel-cache/${KERNEL_TARBALL}" .
+              else
+                echo "Downloading kernel ${KERNEL_VERSION}..."
+                curl -L -O "https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/${KERNEL_TARBALL}"
+                cp "${KERNEL_TARBALL}" "/kernel-cache/" || true
+              fi
+
+              tar xf "${KERNEL_TARBALL}"
               cd linux-${KERNEL_VERSION}
 
               if [ -f "${DEFCONFIG_PATH}" ]; then
@@ -220,7 +259,19 @@ jobs:
               git add -A
               git commit -m "Initial commit for kernel build"
 
-              make -j$(nproc) deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1-1
+              # Disable debug info to speed up build (saves ~10-15 min)
+              ./scripts/config --disable DEBUG_INFO
+              ./scripts/config --disable DEBUG_INFO_DWARF4
+              ./scripts/config --disable DEBUG_INFO_DWARF5
+              ./scripts/config --disable DEBUG_INFO_BTF
+              make olddefconfig
+
+              # Build with ccache (CC="ccache gcc")
+              make -j$(nproc) CC="ccache gcc" deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1-1
+
+              # Show ccache stats
+              echo "=== ccache stats ==="
+              ccache -s || true
 
               # Save kernel packages
               mkdir -p /vyos/custom-packages
@@ -260,6 +311,31 @@ jobs:
               openssl x509 -in ${KERNEL_DIR}/certs/signing_key.pem -outform DER -out /vyos/custom-packages/signing_key.x509
               cp ${KERNEL_DIR}/.config /vyos/custom-packages/kernel-config
 
+              # Create .deb package for r8126 module
+              echo "=== Creating r8126 .deb package ==="
+              KVER="${KERNEL_VERSION}-vyos"
+              PKG_DIR=/tmp/r8126-dkms
+              mkdir -p ${PKG_DIR}/lib/modules/${KVER}/kernel/drivers/net/ethernet/realtek
+              mkdir -p ${PKG_DIR}/DEBIAN
+
+              cp r8126.ko ${PKG_DIR}/lib/modules/${KVER}/kernel/drivers/net/ethernet/realtek/
+
+              # Create debian control file (using printf to avoid YAML parsing issues)
+              printf "Package: r8126-modules\n" > ${PKG_DIR}/DEBIAN/control
+              printf "Version: 10.016.00-1\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Section: kernel\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Priority: optional\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Architecture: amd64\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Depends: linux-image-%s\n" "${KVER}" >> ${PKG_DIR}/DEBIAN/control
+              printf "Maintainer: github-actions@murata-lab.net\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Description: Realtek r8126 5GbE driver module (signed)\n" >> ${PKG_DIR}/DEBIAN/control
+              printf " Signed kernel module for Realtek RTL8126 5GbE network adapter.\n" >> ${PKG_DIR}/DEBIAN/control
+
+              printf "#!/bin/bash\ndepmod -a %s || true\n" "${KVER}" > ${PKG_DIR}/DEBIAN/postinst
+              chmod 755 ${PKG_DIR}/DEBIAN/postinst
+
+              dpkg-deb --build ${PKG_DIR} /vyos/custom-packages/r8126-modules_10.016.00-1_amd64.deb
+
               echo "=== Phase 2 completed ==="
               ls -la /vyos/custom-packages/
 
@@ -269,41 +345,43 @@ jobs:
 
               cd /vyos
 
-              # Install custom kernel packages into build environment
-              echo "Installing custom kernel packages..."
-              sudo dpkg -i /vyos/custom-packages/linux-image-*.deb || true
-              sudo dpkg -i /vyos/custom-packages/linux-headers-*.deb || true
+              # VyOS build system uses packages/ directory for custom packages
+              # Any .deb files in packages/ will automatically replace upstream packages
+              echo "Copying custom packages to packages/ directory..."
+              mkdir -p /vyos/packages
+              cp /vyos/custom-packages/linux-image-*.deb /vyos/packages/
+              cp /vyos/custom-packages/linux-headers-*.deb /vyos/packages/ || true
+              cp /vyos/custom-packages/r8126-modules_*.deb /vyos/packages/
 
-              # Setup r8126 module for inclusion in ISO
-              # Create directory for extra modules
-              mkdir -p /vyos/data/extra-modules
-              cp /vyos/custom-packages/r8126-signed.ko /vyos/data/extra-modules/
-
-              # Copy signing key for kernel to trust
-              mkdir -p /vyos/data/extra-certs
-              cp /vyos/custom-packages/signing_key.x509 /vyos/data/extra-certs/
+              echo "=== Packages to be included in ISO ==="
+              ls -la /vyos/packages/
 
               # Build ISO
-              # Note: VyOS build system will use the installed kernel
-              echo "Building VyOS ISO..."
+              # The build system will automatically pick up packages from packages/ directory
+              echo "Building VyOS ISO with custom kernel..."
               sudo ./build-vyos-image \
                 --architecture amd64 \
                 --build-by "github-actions@murata-lab.net" \
-                --build-comment "Custom ISO with r8126 driver" \
+                --build-comment "Custom ISO with r8126 driver (kernel ${KERNEL_VERSION})" \
                 --version "${VYOS_VERSION}" \
-                --custom-package "/vyos/custom-packages/linux-image-*.deb" \
-                "${BUILD_TYPE}" || {
-                  echo "Custom package option failed, trying standard build..."
-                  sudo ./build-vyos-image \
-                    --architecture amd64 \
-                    --build-by "github-actions@murata-lab.net" \
-                    --build-comment "Custom ISO with r8126 driver" \
-                    --version "${VYOS_VERSION}" \
-                    "${BUILD_TYPE}"
-                }
+                "${BUILD_TYPE}"
 
               echo "=== Build completed ==="
               ls -la /vyos/build/
+
+              # Verify custom kernel is in the ISO
+              echo "=== Verifying ISO contents ==="
+              ISO_FILE=$(ls -1 /vyos/build/*.iso 2>/dev/null | head -1)
+              if [ -n "${ISO_FILE}" ]; then
+                echo "Checking ISO for custom kernel..."
+                mkdir -p /tmp/iso-check
+                sudo mount -o loop "${ISO_FILE}" /tmp/iso-check || true
+                if [ -d "/tmp/iso-check/live" ]; then
+                  echo "ISO mounted successfully"
+                  ls -la /tmp/iso-check/live/ || true
+                fi
+                sudo umount /tmp/iso-check || true
+              fi
             '
 
           echo "=== Final outputs ==="
