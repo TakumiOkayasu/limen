@@ -1,9 +1,17 @@
 FROM alpine:latest
 
-RUN apk add --no-cache bash curl shellcheck
+RUN apk add --no-cache bash curl shellcheck yamllint
 
 # actionlintをインストール
 RUN curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest /usr/local/bin
 
+# lintスクリプトを作成
+RUN echo '#!/bin/bash' > /usr/local/bin/lint-all && \
+    echo 'set -e' >> /usr/local/bin/lint-all && \
+    echo 'echo "=== YAML Lint ===" && yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/workflows/*.yml' >> /usr/local/bin/lint-all && \
+    echo 'echo "=== Action Lint ===" && actionlint -shellcheck= .github/workflows/*.yml' >> /usr/local/bin/lint-all && \
+    chmod +x /usr/local/bin/lint-all
+
 WORKDIR /repo
-ENTRYPOINT ["actionlint"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["lint-all"]
