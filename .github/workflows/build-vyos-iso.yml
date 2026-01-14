@@ -72,7 +72,17 @@ jobs:
           echo "Branch: ${BRANCH}"
           echo "Version: ${VERSION}"
 
+      - name: Cache vyos-build repository
+        id: cache-vyos-build
+        uses: actions/cache@v4
+        with:
+          path: vyos-build
+          key: vyos-build-${{ steps.vars.outputs.branch }}-${{ github.run_id }}
+          restore-keys: |
+            vyos-build-${{ steps.vars.outputs.branch }}-
+
       - name: Clone vyos-build repository
+        if: steps.cache-vyos-build.outputs.cache-hit != 'true'
         run: |
           BRANCH="${{ steps.vars.outputs.branch }}"
           echo "Cloning vyos-build branch: ${BRANCH}"
@@ -85,13 +95,44 @@ jobs:
           git log -1 --oneline
           ls -la
 
+      - name: Update vyos-build repository
+        if: steps.cache-vyos-build.outputs.cache-hit == 'true'
+        run: |
+          cd vyos-build
+          git fetch origin
+          git reset --hard origin/${{ steps.vars.outputs.branch }}
+          echo "=== Repository info (updated) ==="
+          git log -1 --oneline
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker image
+        id: cache-docker
+        uses: actions/cache@v4
+        with:
+          path: /tmp/vyos-docker-image.tar
+          key: vyos-docker-${{ steps.vars.outputs.branch }}-${{ hashFiles('.github/workflows/build-vyos-iso.yml') }}
+          restore-keys: |
+            vyos-docker-${{ steps.vars.outputs.branch }}-
+
+      - name: Load cached Docker image
+        if: steps.cache-docker.outputs.cache-hit == 'true'
+        run: |
+          docker load -i /tmp/vyos-docker-image.tar
+          docker images
+
       - name: Pull VyOS build container
+        if: steps.cache-docker.outputs.cache-hit != 'true'
         run: |
           BRANCH="${{ steps.vars.outputs.branch }}"
           echo "Pulling Docker image: vyos/vyos-build:${BRANCH}"
 
           docker pull "vyos/vyos-build:${BRANCH}"
           docker images
+
+          # キャッシュ用に保存
+          docker save "vyos/vyos-build:${BRANCH}" -o /tmp/vyos-docker-image.tar
 
       - name: Build VyOS ISO
         run: |
@@ -142,9 +183,8 @@ jobs:
           echo "ISO file: ${ISO_FILE}"
           echo "Size: $(du -h "${ISO_FILE}" | cut -f1)"
 
-          # チェックサム生成
-          sha256sum "${ISO_FILE}" > "${ISO_FILE}.sha256"
-          cat "${ISO_FILE}.sha256"
+          # チェックサム生成 (rootで作成されたファイルのためsudo使用)
+          sudo sha256sum "${ISO_FILE}" | sudo tee "${ISO_FILE}.sha256"
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v6
