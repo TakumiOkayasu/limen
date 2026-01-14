@@ -99,6 +99,10 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 - [troubleshooting-ra-missing.md](docs/troubleshooting-ra-missing.md) - RA設定消失
 - [failure-log-2026-01-07-kernel-update.md](docs/failure-log-2026-01-07-kernel-update.md) - カーネル更新失敗記録
 
+### 災害復旧
+
+- [disaster-recovery.md](docs/disaster-recovery.md) - **災害復旧ガイド** (loadコマンド、一括復元スクリプト、手動復元)
+
 ## CI/CD
 
 | ワークフロー | 用途 |
