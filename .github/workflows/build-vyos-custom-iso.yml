@@ -170,6 +170,8 @@ jobs:
             -e KERNEL_VERSION="${KERNEL_VERSION}" \
             -e BUILD_TYPE="${BUILD_TYPE}" \
             -e CCACHE_DIR="/ccache" \
+            -e CCACHE_MAXSIZE="5G" \
+            -e KBUILD_BUILD_TIMESTAMP="" \
             "vyos/vyos-build:${BRANCH}" \
             bash -c '
               set -e
@@ -183,10 +185,8 @@ jobs:
               sudo apt-get install -y curl flex bison bc libssl-dev libelf-dev \
                 libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev ccache
 
-              # Setup ccache
+              # Setup ccache (size set via env var CCACHE_MAXSIZE=5G)
               export PATH="/usr/lib/ccache:$PATH"
-              export CCACHE_DIR="/ccache"
-              export CCACHE_MAXSIZE="2G"
               ccache -s || true
 
               WORK_DIR=/vyos/kernel-build
@@ -264,6 +264,24 @@ jobs:
               ./scripts/config --disable DEBUG_INFO_DWARF4
               ./scripts/config --disable DEBUG_INFO_DWARF5
               ./scripts/config --disable DEBUG_INFO_BTF
+
+              # Disable unused drivers/features for router use case (saves ~5-10 min)
+              # USB/HID (not needed for headless router)
+              ./scripts/config --disable USB_SUPPORT || true
+              ./scripts/config --disable HID || true
+              # Sound (not needed)
+              ./scripts/config --disable SOUND || true
+              # Media/TV (not needed)
+              ./scripts/config --disable MEDIA_SUPPORT || true
+              # Wireless (using wired NICs only)
+              ./scripts/config --disable WIRELESS || true
+              ./scripts/config --disable CFG80211 || true
+              ./scripts/config --disable MAC80211 || true
+              # GPU/DRM (headless server)
+              ./scripts/config --disable DRM || true
+              # Staging drivers (experimental, not needed)
+              ./scripts/config --disable STAGING || true
+
               make olddefconfig
 
               # Build with ccache (CC="ccache gcc")
