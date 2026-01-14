@@ -142,9 +142,8 @@ jobs:
           echo "ISO file: ${ISO_FILE}"
           echo "Size: $(du -h "${ISO_FILE}" | cut -f1)"
 
-          # チェックサム生成
-          sha256sum "${ISO_FILE}" > "${ISO_FILE}.sha256"
-          cat "${ISO_FILE}.sha256"
+          # チェックサム生成 (rootで作成されたファイルのためsudo使用)
+          sudo sha256sum "${ISO_FILE}" | sudo tee "${ISO_FILE}.sha256"
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v6
