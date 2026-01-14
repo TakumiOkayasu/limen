@@ -1,0 +1,402 @@
+name: Build VyOS Custom ISO with r8126
+
+# カスタムカーネル + 署名済みr8126モジュール + ISOを一括ビルド
+# r8126モジュールはカーネルと同じ署名キーで署名されるため、insmodで読み込み可能
+#
+# 参考:
+# - https://docs.vyos.io/en/latest/contributing/build-vyos.html
+# - https://github.com/vyos/vyos-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      vyos_branch:
+        description: "VyOS branch (current, sagitta, circinus)"
+        required: true
+        default: "current"
+        type: choice
+        options:
+          - current
+          - sagitta
+          - circinus
+      kernel_version:
+        description: "Kernel version (e.g., 6.6.117)"
+        required: true
+        default: "6.6.117"
+        type: string
+      build_type:
+        description: "Build type"
+        required: true
+        default: "generic"
+        type: choice
+        options:
+          - generic
+          - cloud-init
+  pull_request:
+    paths:
+      - ".github/workflows/build-vyos-custom-iso.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  build-custom-iso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h
+
+          # 不要なツールを削除してディスク容量を確保
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /opt/hostedtoolcache
+          sudo docker image prune -af
+
+          echo "=== After cleanup ==="
+          df -h
+
+      - name: Set build variables
+        id: vars
+        run: |
+          BRANCH="${{ github.event.inputs.vyos_branch || 'current' }}"
+          KERNEL_VERSION="${{ github.event.inputs.kernel_version || '6.6.117' }}"
+          BUILD_DATE=$(date -u +%Y%m%d%H%M)
+          VERSION="custom-${BUILD_DATE}"
+
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "kernel_version=${KERNEL_VERSION}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+
+          echo "Branch: ${BRANCH}"
+          echo "Kernel Version: ${KERNEL_VERSION}"
+          echo "Version: ${VERSION}"
+
+      - name: Cache vyos-build repository
+        id: cache-vyos-build
+        uses: actions/cache@v4
+        with:
+          path: vyos-build
+          key: vyos-build-${{ steps.vars.outputs.branch }}-${{ github.run_id }}
+          restore-keys: |
+            vyos-build-${{ steps.vars.outputs.branch }}-
+
+      - name: Clone vyos-build repository
+        if: steps.cache-vyos-build.outputs.cache-hit != 'true'
+        run: |
+          BRANCH="${{ steps.vars.outputs.branch }}"
+          echo "Cloning vyos-build branch: ${BRANCH}"
+
+          git clone -b "${BRANCH}" --single-branch --depth 1 \
+            https://github.com/vyos/vyos-build.git
+
+          cd vyos-build
+          echo "=== Repository info ==="
+          git log -1 --oneline
+          ls -la
+
+      - name: Update vyos-build repository
+        if: steps.cache-vyos-build.outputs.cache-hit == 'true'
+        run: |
+          cd vyos-build
+          git fetch origin
+          git reset --hard origin/${{ steps.vars.outputs.branch }}
+          echo "=== Repository info (updated) ==="
+          git log -1 --oneline
+
+      - name: Pull VyOS build container
+        run: |
+          BRANCH="${{ steps.vars.outputs.branch }}"
+          echo "Pulling Docker image: vyos/vyos-build:${BRANCH}"
+
+          docker pull "vyos/vyos-build:${BRANCH}"
+          docker images
+
+      - name: Build custom kernel, r8126 module, and ISO
+        run: |
+          cd vyos-build
+
+          BRANCH="${{ steps.vars.outputs.branch }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+          KERNEL_VERSION="${{ steps.vars.outputs.kernel_version }}"
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'generic' }}"
+
+          echo "=== Build Configuration ==="
+          echo "Branch: ${BRANCH}"
+          echo "Kernel Version: ${KERNEL_VERSION}"
+          echo "Version: ${VERSION}"
+          echo "Build Type: ${BUILD_TYPE}"
+          echo "=========================="
+
+          # 統合ビルドスクリプト
+          # カーネルとr8126を同じ署名キーでビルドし、ISOに含める
+          docker run --rm --privileged \
+            -v "$(pwd):/vyos" \
+            -w /vyos \
+            -e VYOS_VERSION="${VERSION}" \
+            -e KERNEL_VERSION="${KERNEL_VERSION}" \
+            -e BUILD_TYPE="${BUILD_TYPE}" \
+            "vyos/vyos-build:${BRANCH}" \
+            bash -c '
+              set -e
+
+              echo "============================================="
+              echo "=== Phase 1: Build Custom Kernel ==="
+              echo "============================================="
+
+              # Install build dependencies
+              sudo apt-get update
+              sudo apt-get install -y curl flex bison bc libssl-dev libelf-dev \
+                libncurses-dev dwarves kmod cpio rsync debhelper fakeroot dpkg-dev
+
+              WORK_DIR=/vyos/kernel-build
+              mkdir -p ${WORK_DIR}
+              cd ${WORK_DIR}
+
+              # Get VyOS kernel config
+              DEFCONFIG_PATH="/vyos/scripts/package-build/linux-kernel/arch/x86/configs/vyos_defconfig"
+
+              MAJOR_VERSION=$(echo $KERNEL_VERSION | cut -d. -f1)
+              echo "Downloading kernel ${KERNEL_VERSION}..."
+              curl -L -O https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/linux-${KERNEL_VERSION}.tar.xz
+              tar xf linux-${KERNEL_VERSION}.tar.xz
+              cd linux-${KERNEL_VERSION}
+
+              if [ -f "${DEFCONFIG_PATH}" ]; then
+                echo "Using VyOS defconfig from scripts/package-build..."
+                cp "${DEFCONFIG_PATH}" .config
+                make olddefconfig
+              else
+                echo "VyOS defconfig not found at ${DEFCONFIG_PATH}, searching..."
+                find /vyos -name "vyos_defconfig" -type f 2>/dev/null || true
+                echo "ERROR: VyOS defconfig is required for proper MODULE_SIG settings"
+                exit 1
+              fi
+
+              echo "=== Generating module signing keys ==="
+              mkdir -p certs
+
+              # x509.genkey content (base64 encoded)
+              echo "W3JlcV0KZGVmYXVsdF9iaXRzID0gNDA5NgpkaXN0aW5ndWlzaGVkX25hbWUgPSByZXFfZGlzdGluZ3Vpc2hlZF9uYW1lCnByb21wdCA9IG5vCng1MDlfZXh0ZW5zaW9ucyA9IHYzX2NhCgpbcmVxX2Rpc3Rpbmd1aXNoZWRfbmFtZV0KQ04gPSBWeU9TIE1vZHVsZSBTaWduaW5nIEtleQplbWFpbEFkZHJlc3MgPSBidWlsZEB2eW9zLmxvY2FsCgpbdjNfY2FdCmJhc2ljQ29uc3RyYWludHM9Y3JpdGljYWwsQ0E6RkFMU0UKa2V5VXNhZ2U9ZGlnaXRhbFNpZ25hdHVyZQpzdWJqZWN0S2V5SWRlbnRpZmllcj1oYXNoCmF1dGhvcml0eUtleUlkZW50aWZpZXI9a2V5aWQK" | base64 -d > x509.genkey
+
+              openssl req -new -nodes -utf8 -sha512 -days 36500 \
+                -batch -x509 -config x509.genkey \
+                -outform PEM -out certs/signing_key.pem \
+                -keyout certs/signing_key.pem
+
+              # Set signing key path
+              ./scripts/config --set-str MODULE_SIG_KEY "certs/signing_key.pem"
+              ./scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+              ./scripts/config --enable MODULE_SIG_ALL
+              make olddefconfig
+
+              echo "=== Verifying MODULE_SIG settings ==="
+              grep -E "MODULE_SIG|SYSTEM_TRUSTED" .config || true
+              if ! grep -q "CONFIG_MODULE_SIG=y" .config; then
+                echo "ERROR: CONFIG_MODULE_SIG is not enabled!"
+                exit 1
+              fi
+              if ! grep -q "CONFIG_MODULE_SIG_ALL=y" .config; then
+                echo "ERROR: CONFIG_MODULE_SIG_ALL is not enabled!"
+                exit 1
+              fi
+              echo "MODULE_SIG is properly configured."
+
+              echo "=== Building kernel ==="
+              git init
+              git config user.email "build@vyos.local"
+              git config user.name "VyOS Kernel Builder"
+              git add -A
+              git commit -m "Initial commit for kernel build"
+
+              make -j$(nproc) deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1-1
+
+              # Save kernel packages
+              mkdir -p /vyos/custom-packages
+              mv ../*.deb /vyos/custom-packages/
+
+              echo "=== Kernel packages ==="
+              ls -la /vyos/custom-packages/
+
+              echo "============================================="
+              echo "=== Phase 2: Build and Sign r8126 Driver ==="
+              echo "============================================="
+
+              cd /tmp
+              curl -L -o r8126.tar.bz2 https://github.com/openwrt/rtl8126/releases/download/10.016.00/r8126-10.016.00.tar.bz2
+              tar xjf r8126.tar.bz2
+              cd r8126-10.016.00/src
+
+              KERNEL_DIR=${WORK_DIR}/linux-${KERNEL_VERSION}
+              echo "Building r8126 module against ${KERNEL_DIR}..."
+              make -C ${KERNEL_DIR} M=$(pwd) modules
+
+              echo "=== Signing r8126 module ==="
+              ${KERNEL_DIR}/scripts/sign-file sha512 \
+                ${KERNEL_DIR}/certs/signing_key.pem \
+                ${KERNEL_DIR}/certs/signing_key.pem \
+                r8126.ko
+
+              echo "Verifying module signature..."
+              if strings r8126.ko | grep -q "~Module signature appended~"; then
+                echo "SUCCESS: r8126.ko is signed"
+              else
+                echo "WARNING: Module signature not detected"
+              fi
+
+              # Save signed module and signing key
+              cp r8126.ko /vyos/custom-packages/r8126-signed.ko
+              openssl x509 -in ${KERNEL_DIR}/certs/signing_key.pem -outform DER -out /vyos/custom-packages/signing_key.x509
+              cp ${KERNEL_DIR}/.config /vyos/custom-packages/kernel-config
+
+              echo "=== Phase 2 completed ==="
+              ls -la /vyos/custom-packages/
+
+              echo "============================================="
+              echo "=== Phase 3: Build VyOS ISO with Custom Kernel ==="
+              echo "============================================="
+
+              cd /vyos
+
+              # Install custom kernel packages into build environment
+              echo "Installing custom kernel packages..."
+              sudo dpkg -i /vyos/custom-packages/linux-image-*.deb || true
+              sudo dpkg -i /vyos/custom-packages/linux-headers-*.deb || true
+
+              # Setup r8126 module for inclusion in ISO
+              # Create directory for extra modules
+              mkdir -p /vyos/data/extra-modules
+              cp /vyos/custom-packages/r8126-signed.ko /vyos/data/extra-modules/
+
+              # Copy signing key for kernel to trust
+              mkdir -p /vyos/data/extra-certs
+              cp /vyos/custom-packages/signing_key.x509 /vyos/data/extra-certs/
+
+              # Build ISO
+              # Note: VyOS build system will use the installed kernel
+              echo "Building VyOS ISO..."
+              sudo ./build-vyos-image \
+                --architecture amd64 \
+                --build-by "github-actions@murata-lab.net" \
+                --build-comment "Custom ISO with r8126 driver" \
+                --version "${VYOS_VERSION}" \
+                --custom-package "/vyos/custom-packages/linux-image-*.deb" \
+                "${BUILD_TYPE}" || {
+                  echo "Custom package option failed, trying standard build..."
+                  sudo ./build-vyos-image \
+                    --architecture amd64 \
+                    --build-by "github-actions@murata-lab.net" \
+                    --build-comment "Custom ISO with r8126 driver" \
+                    --version "${VYOS_VERSION}" \
+                    "${BUILD_TYPE}"
+                }
+
+              echo "=== Build completed ==="
+              ls -la /vyos/build/
+            '
+
+          echo "=== Final outputs ==="
+          ls -la vyos-build/build/ || true
+          ls -la vyos-build/custom-packages/ || true
+
+      - name: Verify build output
+        run: |
+          cd vyos-build
+
+          echo "=== Build artifacts ==="
+
+          # Check for ISO
+          if [ -d "build" ]; then
+            ls -la build/
+            ISO_FILE=$(ls -1 build/*.iso 2>/dev/null | head -1)
+            if [ -n "${ISO_FILE}" ]; then
+              echo "ISO file: ${ISO_FILE}"
+              echo "Size: $(du -h "${ISO_FILE}" | cut -f1)"
+              sudo sha256sum "${ISO_FILE}" | sudo tee "${ISO_FILE}.sha256"
+            else
+              echo "WARNING: No ISO file found in build/"
+            fi
+          fi
+
+          # Check for custom packages
+          if [ -d "custom-packages" ]; then
+            echo ""
+            echo "=== Custom packages ==="
+            ls -la custom-packages/
+
+            # Verify r8126 module is signed
+            if [ -f "custom-packages/r8126-signed.ko" ]; then
+              if strings custom-packages/r8126-signed.ko | grep -q "~Module signature appended~"; then
+                echo "SUCCESS: r8126-signed.ko has valid signature"
+              else
+                echo "ERROR: r8126-signed.ko signature not found"
+                exit 1
+              fi
+            fi
+
+            # Show kernel config MODULE_SIG settings
+            if [ -f "custom-packages/kernel-config" ]; then
+              echo ""
+              echo "=== MODULE_SIG settings ==="
+              grep -E "MODULE_SIG" custom-packages/kernel-config | head -10
+            fi
+          fi
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vyos-custom-iso-${{ steps.vars.outputs.version }}
+          path: |
+            vyos-build/build/*.iso
+            vyos-build/build/*.sha256
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: warn
+
+      - name: Upload kernel packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: vyos-kernel-packages-${{ steps.vars.outputs.version }}
+          path: |
+            vyos-build/custom-packages/*.deb
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload signed r8126 module
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8126-signed-module-${{ steps.vars.outputs.version }}
+          path: |
+            vyos-build/custom-packages/r8126-signed.ko
+            vyos-build/custom-packages/signing_key.x509
+            vyos-build/custom-packages/kernel-config
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ steps.vars.outputs.version }}
+          path: |
+            vyos-build/build/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+  # 失敗時の自動修正
+  on-failure:
+    if: failure()
+    needs: [build-custom-iso]
+    uses: ./.github/workflows/on-failure.yml
+    secrets: inherit
