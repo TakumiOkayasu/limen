@@ -1,0 +1,282 @@
+name: On Failure - Auto Fix
+
+# Reusable workflow: CI失敗時の自動修正
+# 使い方:
+#   jobs:
+#     on-failure:
+#       if: failure()
+#       needs: [your-job]
+#       uses: ./.github/workflows/on-failure.yml
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      workflow_name:
+        description: "Failed workflow name"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  analyze-and-fix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get failed workflow info
+        id: info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Workflow Run Info ==="
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Repository: ${{ github.repository }}"
+
+          # 失敗したジョブのログを取得
+          gh run view ${{ github.run_id }} --log-failed > /tmp/failed_logs.txt 2>&1 || true
+
+          # ログが大きすぎる場合は末尾のみ
+          tail -200 /tmp/failed_logs.txt > /tmp/error_summary.txt
+
+          echo "=== Error Summary (last 50 lines) ==="
+          tail -50 /tmp/error_summary.txt
+
+      - name: Find related workflow file
+        id: find-workflow
+        run: |
+          # 現在のワークフロー名からファイルを特定
+          WORKFLOW_NAME="${{ github.workflow }}"
+          echo "Looking for workflow: ${WORKFLOW_NAME}"
+
+          # .github/workflows/ 内のファイルを検索
+          WORKFLOW_FILE=""
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            if [ -f "$f" ]; then
+              if grep -q "^name: ${WORKFLOW_NAME}$" "$f" 2>/dev/null || \
+                 grep -q "^name: \"${WORKFLOW_NAME}\"$" "$f" 2>/dev/null || \
+                 grep -q "^name: '${WORKFLOW_NAME}'$" "$f" 2>/dev/null; then
+                WORKFLOW_FILE="$f"
+                break
+              fi
+            fi
+          done
+
+          if [ -n "${WORKFLOW_FILE}" ]; then
+            echo "Found workflow file: ${WORKFLOW_FILE}"
+            echo "workflow_file=${WORKFLOW_FILE}" >> $GITHUB_OUTPUT
+          else
+            echo "Workflow file not found for: ${WORKFLOW_NAME}"
+            echo "workflow_file=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Analyze with Claude API
+        id: analyze
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          WORKFLOW_FILE="${{ steps.find-workflow.outputs.workflow_file }}"
+
+          # エラーログを読み込み
+          ERROR_LOG=$(cat /tmp/error_summary.txt | head -c 10000)
+
+          # ワークフローファイルの内容
+          if [ -n "${WORKFLOW_FILE}" ] && [ -f "${WORKFLOW_FILE}" ]; then
+            WORKFLOW_CONTENT=$(cat "${WORKFLOW_FILE}" | head -c 15000)
+          else
+            WORKFLOW_CONTENT="(workflow file not found)"
+          fi
+
+          # プロンプトを作成
+          cat > /tmp/prompt.txt << 'PROMPT_EOF'
+          GitHub Actions CIが失敗しました。エラーログとワークフローファイルを分析し、修正案を提示してください。
+
+          ## エラーログ
+          ```
+          ERROR_LOG_PLACEHOLDER
+          ```
+
+          ## ワークフローファイル (WORKFLOW_FILE_PLACEHOLDER)
+          ```yaml
+          WORKFLOW_CONTENT_PLACEHOLDER
+          ```
+
+          ## 出力形式
+
+          修正が必要な場合:
+          ---FIX_START---
+          ファイルパス: (修正するファイルのパス)
+          説明: (何を修正するか、なぜ修正が必要か)
+          ---CONTENT_START---
+          (修正後のファイル内容全体)
+          ---CONTENT_END---
+          ---FIX_END---
+
+          修正が不要/不可能な場合:
+          ---NO_FIX---
+          理由: (修正が不要/不可能な理由)
+          推奨アクション: (手動で行うべき対応)
+          ---END---
+          PROMPT_EOF
+
+          # プレースホルダーを置換
+          sed -i "s|ERROR_LOG_PLACEHOLDER|${ERROR_LOG}|g" /tmp/prompt.txt 2>/dev/null || true
+          sed -i "s|WORKFLOW_FILE_PLACEHOLDER|${WORKFLOW_FILE}|g" /tmp/prompt.txt 2>/dev/null || true
+          sed -i "s|WORKFLOW_CONTENT_PLACEHOLDER|${WORKFLOW_CONTENT}|g" /tmp/prompt.txt 2>/dev/null || true
+
+          PROMPT=$(cat /tmp/prompt.txt)
+
+          # Claude APIに送信
+          jq -n --arg prompt "$PROMPT" '{
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 8192,
+            messages: [{role: "user", content: $prompt}]
+          }' > /tmp/payload.json
+
+          curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d @/tmp/payload.json > /tmp/response.json
+
+          # レスポンスを抽出
+          jq -r '.content[0].text // "API Error: " + (.error.message // "Unknown error")' /tmp/response.json > /tmp/claude_response.txt
+
+          echo "=== Claude Response ==="
+          cat /tmp/claude_response.txt
+
+      - name: Apply fix and create PR
+        id: apply-fix
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESPONSE=$(cat /tmp/claude_response.txt)
+
+          if echo "$RESPONSE" | grep -qF -- "---FIX_START---"; then
+            echo "Fix detected, applying..."
+
+            # ファイルパスを抽出
+            FILE_PATH=$(echo "$RESPONSE" | sed -n 's/^ファイルパス: *\(.*\)/\1/p' | tr -d ' ' | head -1)
+
+            # 説明を抽出
+            DESCRIPTION=$(echo "$RESPONSE" | sed -n 's/^説明: *\(.*\)/\1/p' | head -1)
+
+            if [ -z "${FILE_PATH}" ]; then
+              echo "::warning::Could not extract file path from response"
+              echo "has_fix=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            echo "File to fix: ${FILE_PATH}"
+            echo "Description: ${DESCRIPTION}"
+
+            # 修正内容を抽出
+            echo "$RESPONSE" | sed -n '/---CONTENT_START---/,/---CONTENT_END---/p' | \
+              sed '1d;$d' > /tmp/fixed_content.txt
+
+            if [ ! -s /tmp/fixed_content.txt ]; then
+              echo "::warning::Fixed content is empty"
+              echo "has_fix=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # ブランチを作成
+            BRANCH_NAME="fix/auto-fix-${{ github.run_id }}"
+            git checkout -b "${BRANCH_NAME}"
+
+            # ファイルを更新
+            mkdir -p "$(dirname "${FILE_PATH}")"
+            cp /tmp/fixed_content.txt "${FILE_PATH}"
+
+            # コミット
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add "${FILE_PATH}"
+            git commit -m "fix(ci): auto-fix for workflow run #${{ github.run_id }}
+
+            ${DESCRIPTION}
+
+            Co-Authored-By: Claude <noreply@anthropic.com>"
+
+            # プッシュ
+            git push -u origin "${BRANCH_NAME}"
+
+            # PR作成
+            gh pr create \
+              --title "fix(ci): Auto-fix for failed workflow run #${{ github.run_id }}" \
+              --body "## Summary
+
+            This PR was automatically generated to fix a CI failure.
+
+            **Failed workflow:** ${{ github.workflow }}
+            **Run ID:** #${{ github.run_id }}
+            **Run URL:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            ## Fix Description
+
+            ${DESCRIPTION}
+
+            ## Review Checklist
+
+            - [ ] 修正内容が適切か確認
+            - [ ] 意図しない変更がないか確認
+            - [ ] テストが必要な場合は実施
+
+            ---
+            🤖 Generated with Claude API" \
+              --head "${BRANCH_NAME}" \
+              --base "${{ github.ref_name }}"
+
+            echo "has_fix=true" >> $GITHUB_OUTPUT
+            echo "::notice::PR created successfully"
+
+          elif echo "$RESPONSE" | grep -qF -- "---NO_FIX---"; then
+            echo "No automatic fix available"
+            REASON=$(echo "$RESPONSE" | sed -n '/---NO_FIX---/,/---END---/p' | grep -v "^---")
+            echo "::notice::${REASON}"
+            echo "has_fix=false" >> $GITHUB_OUTPUT
+          else
+            echo "::warning::Unexpected response format from Claude API"
+            echo "has_fix=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issue if no API key
+        if: ${{ secrets.ANTHROPIC_API_KEY == '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::warning::ANTHROPIC_API_KEY is not set. Creating issue for manual review."
+
+          gh issue create \
+            --title "CI Failure: ${{ github.workflow }} #${{ github.run_id }}" \
+            --body "## CI Failure Detected
+
+          **Workflow:** ${{ github.workflow }}
+          **Run ID:** #${{ github.run_id }}
+          **Run URL:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ## Error Log (last 50 lines)
+
+          \`\`\`
+          $(tail -50 /tmp/error_summary.txt)
+          \`\`\`
+
+          ## Next Steps
+
+          1. Review the failed workflow run
+          2. Identify the root cause
+          3. Create a fix PR
+
+          ---
+          🤖 Auto-generated by on-failure workflow" \
+            --label "bug,ci" || echo "::warning::Failed to create issue (labels may not exist)"

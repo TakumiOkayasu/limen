@@ -274,3 +274,10 @@ jobs:
           name: kernel-config
           path: vyos-build/output/kernel-config
           retention-days: 30
+
+  # 失敗時の自動修正
+  on-failure:
+    if: failure()
+    needs: [build]
+    uses: ./.github/workflows/on-failure.yml
+    secrets: inherit
