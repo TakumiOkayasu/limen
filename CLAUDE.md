@@ -234,9 +234,14 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ## 復旧用リソース
 
-- `scripts/recovery-vyos-config.sh` - 復旧手順表示スクリプト
-- `scripts/backup-vyos-config.txt` - 設定バックアップ
-- [docs/phase6-backup.md](docs/phase6-backup.md) - 災害復旧手順
+→ **[docs/disaster-recovery.md](docs/disaster-recovery.md)** - 災害復旧ガイド (詳細手順)
+
+| ファイル | 用途 |
+|----------|------|
+| `scripts/vyos-restore.env.example` | シークレット値テンプレート |
+| `scripts/generate-vyos-restore.sh` | vbashスクリプト生成ツール |
+| `scripts/recovery-vyos-config.sh` | 手動復元用の手順表示 |
+| `scripts/backup-vyos-config.txt` | 設定コマンド一覧 (参照用) |
 
 ---
 
