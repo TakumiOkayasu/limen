@@ -1,6 +1,6 @@
 FROM alpine:latest
 
-RUN apk add --no-cache bash curl
+RUN apk add --no-cache bash curl shellcheck
 
 # actionlintをインストール
 RUN curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest /usr/local/bin
