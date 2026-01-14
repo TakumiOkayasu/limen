@@ -7,10 +7,10 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 | 項目 | 状態 | 備考 |
 |------|------|------|
 | IPv6 | **稼働中** | 10Gbps (ONU直結) |
-| IPv4 | **稼働中** | WXR経由MAP-E (1Gbps) |
+| IPv4 | **稼働中** | WXR経由MAP-E (1Gbps上限) |
 | WireGuard VPN | **稼働中** | 外部からVyOSにSSH可能 |
 | Cloudflare DDNS | **稼働中** | router.murata-lab.net |
-| RTL8126 (5GbE) | 未使用 | カーネルモジュール署名問題 |
+| RTL8126 (5GbE) | **CI対応中** | カスタムISOでビルド中 |
 
 ## 設計思想
 
@@ -103,9 +103,10 @@ VyOSベースの自作ルーターで、BIGLOBE光 10Gbps回線を最大限活�
 
 | ワークフロー | 用途 |
 |-------------|------|
-| build-vyos.yml | VyOSカーネル + 署名済みr8126モジュールのビルド |
-| ci-auto-fix.yml | CI失敗時の自動修正PR作成 |
+| build-vyos-custom-iso.yml | VyOSカスタムISO (カーネル + 署名済みr8126) のビルド |
+| on-failure.yml | CI失敗時の自動修正PR作成 (reusable workflow) |
 | dependabot-auto-merge.yml | Dependabot PRの自動マージ |
+| lint-workflows.yml | ワークフローYAMLの構文チェック |
 
 ## 既知の問題と対応状況
 
@@ -115,11 +116,14 @@ Intel X540-T2は発熱が大きく、ヒートシンクなしで長時間稼働�
 
 **対応**: ヒートシンク (40x40mm) を取り付け済み。安定稼働中。
 
-### RTL8126 モジュール署名 (対応中)
+### RTL8126 モジュール署名 (CI対応中)
 
 VyOSはMODULE_SIG_FORCE=yでビルドされており、署名なしモジュールをロードできない。
 
-**対応**: CIで署名済みモジュールをビルド中。将来的にeth0 (1GbE) を5GbEに置き換え予定。
+**対応**: CIでカスタムカーネル+署名済みr8126モジュールを含むISOをビルド中。
+- ワークフロー: `.github/workflows/build-vyos-custom-iso.yml`
+- ビルド時間: 約80分 (GitHub Actions標準ランナー)
+- 完成後、eth0 (1GbE) をRTL8126 (5GbE) に置き換え予定
 
 ## セキュリティ
 
