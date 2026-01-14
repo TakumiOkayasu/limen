@@ -4,6 +4,8 @@
 *.secret
 secrets/
 credentials/
+scripts/vyos-restore.env
+scripts/vyos-restore.vbash
 
 # VyOS設定バックアップ（機密情報を含む可能性）
 *.boot
