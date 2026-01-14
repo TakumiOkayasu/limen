@@ -17,6 +17,11 @@ on:
     paths:
       - ".github/workflows/build-vyos.yml"
 
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
