@@ -300,7 +300,6 @@ jobs:
           name: signed-modules-${{ steps.vars.outputs.version }}
           path: |
             vyos-build/custom-packages/r8126-signed.ko
-            vyos-build/custom-packages/ixgbe-signed.ko
             vyos-build/custom-packages/signing_key.x509
             vyos-build/custom-packages/kernel-config
           retention-days: 30
