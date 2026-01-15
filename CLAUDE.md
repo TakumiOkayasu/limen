@@ -130,6 +130,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - **ブランチ作成はAIが実行する** - ユーザーに指示を出すのではなく、AIが `git checkout -b` を実行
 - **コミット/プッシュはユーザーが実行** - AIはコマンドを提示するのみ
 - **マージ後の後片付けもAIの仕事** - `git checkout main && git pull && git branch -d <branch>`
+- **DependabotのPRは変更しない** - Dependabotが作成したPRの内容には手を加えない。マージ/クローズの判断のみユーザーが行う
 
 ---
 
