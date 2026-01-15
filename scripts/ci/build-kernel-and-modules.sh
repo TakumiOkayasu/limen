@@ -52,13 +52,26 @@ log_error() {
 }
 
 # Create deb package for kernel module
+# Arguments:
+#   $1 - pkg_name: Package name
+#   $2 - pkg_version: Package version
+#   $3 - module_file: Path to .ko file
+#   $4 - module_dest_dir: Destination directory in package
+#   $5 - description: Package description
+#   $6 - depends: Depends field value (optional)
+#   $7 - provides: Provides field value (optional)
+#   $8 - conflicts: Conflicts field value (optional)
+#   $9 - replaces: Replaces field value (optional)
 create_module_deb() {
     local pkg_name=$1
     local pkg_version=$2
     local module_file=$3
     local module_dest_dir=$4
     local description=$5
-    local extra_control=${6:-""}
+    local depends=${6:-""}
+    local provides=${7:-""}
+    local conflicts=${8:-""}
+    local replaces=${9:-""}
 
     local pkg_dir=/tmp/${pkg_name}-pkg
     rm -rf "${pkg_dir}"
@@ -67,13 +80,24 @@ create_module_deb() {
 
     cp "${module_file}" "${pkg_dir}/${module_dest_dir}/"
 
+    # Write required fields first
     cat > "${pkg_dir}/DEBIAN/control" << CTRL
 Package: ${pkg_name}
 Version: ${pkg_version}
 Section: kernel
 Priority: optional
 Architecture: amd64
-${extra_control}Maintainer: github-actions@murata-lab.net
+CTRL
+
+    # Append optional fields conditionally (avoids empty lines)
+    [ -n "$depends" ]   && echo "Depends: $depends"     >> "${pkg_dir}/DEBIAN/control"
+    [ -n "$provides" ]  && echo "Provides: $provides"   >> "${pkg_dir}/DEBIAN/control"
+    [ -n "$conflicts" ] && echo "Conflicts: $conflicts" >> "${pkg_dir}/DEBIAN/control"
+    [ -n "$replaces" ]  && echo "Replaces: $replaces"   >> "${pkg_dir}/DEBIAN/control"
+
+    # Append final required fields
+    cat >> "${pkg_dir}/DEBIAN/control" << CTRL
+Maintainer: github-actions@murata-lab.net
 Description: ${description}
 CTRL
 
@@ -260,7 +284,7 @@ build_r8126() {
         "r8126.ko" \
         "lib/modules/${KVER}/kernel/drivers/net/ethernet/realtek" \
         "Realtek r8126 5GbE driver module (signed)" \
-        "Depends: linux-image-${KVER}\n"
+        "linux-image-${KVER}"
 
     log_info "Phase 2 completed"
 }
@@ -288,7 +312,10 @@ build_ixgbe() {
         "ixgbe.ko" \
         "lib/modules/${KVER}/updates/drivers/net/ethernet/intel/ixgbe" \
         "Intel ixgbe 10GbE driver module (custom signed)" \
-        "Provides: ixgbe-modules\nConflicts: ixgbe-modules\nReplaces: ixgbe-modules\n"
+        "" \
+        "ixgbe-modules" \
+        "ixgbe-modules" \
+        "ixgbe-modules"
 
     log_info "Phase 2.5 completed"
     ls -la "${CUSTOM_PKG_DIR}/"
