@@ -241,6 +241,12 @@ build_kernel() {
     ./scripts/config --disable DRM || true
     ./scripts/config --disable STAGING || true
 
+    # Enable Intel 10GbE driver (disabled in VyOS defconfig, required for X540-T2)
+    # VyOS uses out-of-tree vyos-intel-ixgbe package, but it's signed with VyOS key
+    # Building in-tree ensures the module is signed with our custom key
+    ./scripts/config --module IXGBE
+    ./scripts/config --module IXGBEVF
+
     make olddefconfig
 
     # Build kernel
@@ -291,38 +297,6 @@ build_r8126() {
 }
 
 # =============================================
-# Phase 2.5: Build and Sign ixgbe Driver
-# =============================================
-build_ixgbe() {
-    log_phase "Phase 2.5: Build and Sign ixgbe Driver"
-
-    # Use kernel tree ixgbe source (avoids external download failures)
-    log_info "Copying ixgbe source from ${KERNEL_DIR}/drivers/net/ethernet/intel/ixgbe..."
-    cp -r "${KERNEL_DIR}/drivers/net/ethernet/intel/ixgbe" /tmp/ixgbe-src
-    cd /tmp/ixgbe-src
-
-    log_info "Building ixgbe module against ${KERNEL_DIR}..."
-    make -C "${KERNEL_DIR}" M="$(pwd)" modules
-
-    sign_module ixgbe.ko
-    cp ixgbe.ko "${CUSTOM_PKG_DIR}/ixgbe-signed.ko"
-
-    create_module_deb \
-        "ixgbe-modules-custom" \
-        "${KERNEL_VERSION}-1" \
-        "ixgbe.ko" \
-        "lib/modules/${KVER}/updates/drivers/net/ethernet/intel/ixgbe" \
-        "Intel ixgbe 10GbE driver module (custom signed)" \
-        "" \
-        "ixgbe-modules" \
-        "ixgbe-modules" \
-        "ixgbe-modules"
-
-    log_info "Phase 2.5 completed"
-    ls -la "${CUSTOM_PKG_DIR}/"
-}
-
-# =============================================
 # Phase 3: Build VyOS ISO
 # =============================================
 build_iso() {
@@ -336,7 +310,6 @@ build_iso() {
     cp "${CUSTOM_PKG_DIR}"/linux-image-*.deb /vyos/packages/
     cp "${CUSTOM_PKG_DIR}"/linux-headers-*.deb /vyos/packages/ || true
     cp "${CUSTOM_PKG_DIR}"/r8126-modules_*.deb /vyos/packages/
-    cp "${CUSTOM_PKG_DIR}"/ixgbe-modules-custom_*.deb /vyos/packages/
 
     log_info "Packages to be included in ISO:"
     ls -la /vyos/packages/
@@ -380,7 +353,6 @@ main() {
 
     build_kernel
     build_r8126
-    build_ixgbe
     build_iso
 
     log_info "All phases completed successfully!"
