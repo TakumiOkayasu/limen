@@ -266,9 +266,7 @@ jobs:
               ./scripts/config --disable DEBUG_INFO_BTF
 
               # Disable unused drivers/features for router use case (saves ~5-10 min)
-              # USB/HID (not needed for headless router)
-              ./scripts/config --disable USB_SUPPORT || true
-              ./scripts/config --disable HID || true
+              # NOTE: USB_SUPPORT must remain ENABLED for USB boot/installation
               # Sound (not needed)
               ./scripts/config --disable SOUND || true
               # Media/TV (not needed)
