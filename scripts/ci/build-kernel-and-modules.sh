@@ -90,10 +90,11 @@ Architecture: amd64
 CTRL
 
     # Append optional fields conditionally (avoids empty lines)
-    [ -n "$depends" ]   && echo "Depends: $depends"     >> "${pkg_dir}/DEBIAN/control"
-    [ -n "$provides" ]  && echo "Provides: $provides"   >> "${pkg_dir}/DEBIAN/control"
-    [ -n "$conflicts" ] && echo "Conflicts: $conflicts" >> "${pkg_dir}/DEBIAN/control"
-    [ -n "$replaces" ]  && echo "Replaces: $replaces"   >> "${pkg_dir}/DEBIAN/control"
+    # Note: || true ensures set -e doesn't cause script exit when field is empty
+    [ -n "$depends" ]   && echo "Depends: $depends"     >> "${pkg_dir}/DEBIAN/control" || true
+    [ -n "$provides" ]  && echo "Provides: $provides"   >> "${pkg_dir}/DEBIAN/control" || true
+    [ -n "$conflicts" ] && echo "Conflicts: $conflicts" >> "${pkg_dir}/DEBIAN/control" || true
+    [ -n "$replaces" ]  && echo "Replaces: $replaces"   >> "${pkg_dir}/DEBIAN/control" || true
 
     # Append final required fields
     cat >> "${pkg_dir}/DEBIAN/control" << CTRL
