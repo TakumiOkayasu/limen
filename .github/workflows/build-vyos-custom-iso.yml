@@ -356,6 +356,69 @@ jobs:
               ls -la /vyos/custom-packages/
 
               echo "============================================="
+              echo "=== Phase 2.5: Re-sign VyOS Intel NIC Drivers ==="
+              echo "============================================="
+              # VyOS packages contain pre-signed ixgbe modules with VyOS official key
+              # These are in a separate package (vyos-linux-firmware or similar)
+              # We need to find and re-sign them after ISO build, or build from source
+
+              KVER="${KERNEL_VERSION}-vyos"
+              KERNEL_DIR=${WORK_DIR}/linux-${KERNEL_VERSION}
+
+              # Download Intel ixgbe driver source and build with our kernel
+              cd /tmp
+              IXGBE_VERSION="5.21.5"
+              curl -L -o ixgbe.tar.gz "https://sourceforge.net/projects/e1000/files/ixgbe%20stable/${IXGBE_VERSION}/ixgbe-${IXGBE_VERSION}.tar.gz/download"
+              tar xzf ixgbe.tar.gz
+              cd ixgbe-${IXGBE_VERSION}/src
+
+              echo "Building ixgbe module against custom kernel..."
+              make -C ${KERNEL_DIR} M=$(pwd) modules
+
+              echo "=== Signing ixgbe module ==="
+              ${KERNEL_DIR}/scripts/sign-file sha512 \
+                ${KERNEL_DIR}/certs/signing_key.pem \
+                ${KERNEL_DIR}/certs/signing_key.pem \
+                ixgbe.ko
+
+              if strings ixgbe.ko | grep -q "~Module signature appended~"; then
+                echo "SUCCESS: ixgbe.ko is signed"
+              else
+                echo "WARNING: ixgbe.ko signature not detected"
+              fi
+
+              # Create .deb package for ixgbe module (to override VyOS default)
+              echo "=== Creating ixgbe .deb package ==="
+              PKG_DIR=/tmp/ixgbe-dkms
+              mkdir -p ${PKG_DIR}/lib/modules/${KVER}/updates/drivers/net/ethernet/intel/ixgbe
+              mkdir -p ${PKG_DIR}/DEBIAN
+
+              cp ixgbe.ko ${PKG_DIR}/lib/modules/${KVER}/updates/drivers/net/ethernet/intel/ixgbe/
+
+              printf "Package: ixgbe-modules-custom\n" > ${PKG_DIR}/DEBIAN/control
+              printf "Version: %s-1\n" "${IXGBE_VERSION}" >> ${PKG_DIR}/DEBIAN/control
+              printf "Section: kernel\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Priority: optional\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Architecture: amd64\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Provides: ixgbe-modules\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Conflicts: ixgbe-modules\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Replaces: ixgbe-modules\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Maintainer: github-actions@murata-lab.net\n" >> ${PKG_DIR}/DEBIAN/control
+              printf "Description: Intel ixgbe 10GbE driver module (custom signed)\n" >> ${PKG_DIR}/DEBIAN/control
+              printf " Signed kernel module for Intel X540/X550 10GbE network adapters.\n" >> ${PKG_DIR}/DEBIAN/control
+
+              printf "#!/bin/bash\ndepmod -a %s || true\n" "${KVER}" > ${PKG_DIR}/DEBIAN/postinst
+              chmod 755 ${PKG_DIR}/DEBIAN/postinst
+
+              dpkg-deb --build ${PKG_DIR} /vyos/custom-packages/ixgbe-modules-custom_${IXGBE_VERSION}-1_amd64.deb
+
+              # Save signed module
+              cp ixgbe.ko /vyos/custom-packages/ixgbe-signed.ko
+
+              echo "=== Phase 2.5 completed ==="
+              ls -la /vyos/custom-packages/
+
+              echo "============================================="
               echo "=== Phase 3: Build VyOS ISO with Custom Kernel ==="
               echo "============================================="
 
@@ -368,6 +431,7 @@ jobs:
               cp /vyos/custom-packages/linux-image-*.deb /vyos/packages/
               cp /vyos/custom-packages/linux-headers-*.deb /vyos/packages/ || true
               cp /vyos/custom-packages/r8126-modules_*.deb /vyos/packages/
+              cp /vyos/custom-packages/ixgbe-modules-custom_*.deb /vyos/packages/
 
               echo "=== Packages to be included in ISO ==="
               ls -la /vyos/packages/
