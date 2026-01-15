@@ -366,11 +366,13 @@ jobs:
               KERNEL_DIR=${WORK_DIR}/linux-${KERNEL_VERSION}
 
               # Download Intel ixgbe driver source and build with our kernel
+              # Use kernel's built-in ixgbe source instead of external download
+              # The kernel already includes ixgbe driver, we just need to build it as a module
               cd /tmp
-              IXGBE_VERSION="5.21.5"
-              curl -L -o ixgbe.tar.gz "https://sourceforge.net/projects/e1000/files/ixgbe%20stable/${IXGBE_VERSION}/ixgbe-${IXGBE_VERSION}.tar.gz/download"
-              tar xzf ixgbe.tar.gz
-              cd ixgbe-${IXGBE_VERSION}/src
+
+              # Copy ixgbe source from kernel tree
+              cp -r ${KERNEL_DIR}/drivers/net/ethernet/intel/ixgbe /tmp/ixgbe-src
+              cd /tmp/ixgbe-src
 
               echo "Building ixgbe module against custom kernel..."
               make -C ${KERNEL_DIR} M=$(pwd) modules
@@ -389,6 +391,7 @@ jobs:
 
               # Create .deb package for ixgbe module (to override VyOS default)
               echo "=== Creating ixgbe .deb package ==="
+              IXGBE_VERSION="${KERNEL_VERSION}"
               PKG_DIR=/tmp/ixgbe-dkms
               mkdir -p ${PKG_DIR}/lib/modules/${KVER}/updates/drivers/net/ethernet/intel/ixgbe
               mkdir -p ${PKG_DIR}/DEBIAN
