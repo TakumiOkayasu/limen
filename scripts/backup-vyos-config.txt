@@ -16,6 +16,8 @@ set system time-zone 'Asia/Tokyo'
 # NTP設定
 set service ntp server ntp.nict.jp
 set service ntp server ntp.jst.mfeed.ad.jp
+set service ntp allow-client address '192.168.0.0/16'
+set service ntp allow-client address 'fc00::/7'
 
 # --- eth0: WXR接続 (MAP-E upstream) ---
 set interfaces ethernet eth0 description 'To WXR LAN (IPv4 transit)'
@@ -175,6 +177,12 @@ set service dns dynamic name cloudflare zone 'murata-lab.net'
 set service dns dynamic name cloudflare host-name 'router.murata-lab.net'
 # set service dns dynamic name cloudflare password '<Cloudflare APIトークン>'
 set service dns dynamic name cloudflare ip-version 'ipv6'
+
+# --- システム設定 ---
+set system config-management commit-revisions '100'
+set system console device ttyS0 speed '115200'
+set system syslog local facility all level 'info'
+set system syslog local facility local7 level 'debug'
 
 # --- 自動バックアップ ---
 set system task-scheduler task daily-backup crontab-spec '0 3 * * *'
