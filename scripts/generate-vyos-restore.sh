@@ -68,16 +68,18 @@ configure
 # ============================================
 # 基本設定
 # ============================================
-echo "[1/12] 基本設定..."
+echo "[1/13] 基本設定..."
 set system host-name 'vyos-router'
 set system time-zone 'Asia/Tokyo'
 set service ntp server ntp.nict.jp
 set service ntp server ntp.jst.mfeed.ad.jp
+set service ntp allow-client address '192.168.0.0/16'
+set service ntp allow-client address 'fc00::/7'
 
 # ============================================
 # SSH公開鍵
 # ============================================
-echo "[2/12] SSH公開鍵..."
+echo "[2/13] SSH公開鍵..."
 SCRIPT_HEADER
 
 # SSH公開鍵を挿入
@@ -92,7 +94,7 @@ cat >> "$OUTPUT_FILE" << 'SCRIPT_INTERFACES'
 # ============================================
 # インターフェース設定
 # ============================================
-echo "[3/12] インターフェース設定..."
+echo "[3/13] インターフェース設定..."
 
 # eth0: WXR接続
 set interfaces ethernet eth0 description 'To WXR LAN (IPv4 transit)'
@@ -118,7 +120,7 @@ set interfaces ethernet eth2 description 'LAN'
 # ============================================
 # RA配布 (LAN側)
 # ============================================
-echo "[4/12] RA配布設定..."
+echo "[4/13] RA配布設定..."
 set service router-advert interface eth2 prefix 2404:7a82:4d02:4101::/64
 set service router-advert interface eth2 name-server 2606:4700:4700::1111
 set service router-advert interface eth2 name-server 2606:4700:4700::1001
@@ -127,7 +129,7 @@ set service router-advert interface eth2 name-server 2001:4860:4860::8888
 # ============================================
 # IPv4ルーティング + NAT
 # ============================================
-echo "[5/12] IPv4ルーティング..."
+echo "[5/13] IPv4ルーティング..."
 set protocols static route 0.0.0.0/0 next-hop 192.168.100.1
 
 set nat source rule 100 outbound-interface name 'eth0'
@@ -137,7 +139,7 @@ set nat source rule 100 translation address 'masquerade'
 # ============================================
 # IPv6 input filter
 # ============================================
-echo "[6/12] IPv6 input filter..."
+echo "[6/13] IPv6 input filter..."
 set firewall ipv6 input filter default-action 'drop'
 set firewall ipv6 input filter default-log
 
@@ -170,7 +172,7 @@ set firewall ipv6 input filter rule 50 description 'Allow WireGuard'
 # ============================================
 # IPv6 forward filter
 # ============================================
-echo "[7/12] IPv6 forward filter..."
+echo "[7/13] IPv6 forward filter..."
 set firewall ipv6 forward filter default-action 'drop'
 set firewall ipv6 forward filter default-log
 
@@ -220,7 +222,7 @@ set firewall ipv6 forward filter rule 100 outbound-interface name 'eth1'
 # ============================================
 # IPv4 forward filter
 # ============================================
-echo "[8/12] IPv4 forward filter..."
+echo "[8/13] IPv4 forward filter..."
 set firewall ipv4 forward filter default-action 'accept'
 
 set firewall ipv4 forward filter rule 90 action 'drop'
@@ -236,7 +238,7 @@ set firewall ipv4 forward filter rule 91 description 'Block VPN to WAN'
 # ============================================
 # WireGuard VPN
 # ============================================
-echo "[9/12] WireGuard VPN..."
+echo "[9/13] WireGuard VPN..."
 set interfaces wireguard wg0 address '10.10.10.1/24'
 set interfaces wireguard wg0 address 'fd00:10:10:10::1/64'
 set interfaces wireguard wg0 port '51820'
@@ -260,7 +262,7 @@ cat >> "$OUTPUT_FILE" << 'SCRIPT_DDNS'
 # ============================================
 # Cloudflare DDNS
 # ============================================
-echo "[10/12] Cloudflare DDNS..."
+echo "[10/13] Cloudflare DDNS..."
 set service dns dynamic name cloudflare address interface 'eth1'
 set service dns dynamic name cloudflare protocol 'cloudflare'
 set service dns dynamic name cloudflare zone 'murata-lab.net'
@@ -276,16 +278,25 @@ cat >> "$OUTPUT_FILE" << 'SCRIPT_FOOTER'
 set service dns dynamic name cloudflare ip-version 'ipv6'
 
 # ============================================
+# システム設定
+# ============================================
+echo "[11/13] システム設定..."
+set system config-management commit-revisions '100'
+set system console device ttyS0 speed '115200'
+set system syslog local facility all level 'info'
+set system syslog local facility local7 level 'debug'
+
+# ============================================
 # 自動バックアップ
 # ============================================
-echo "[11/12] 自動バックアップ設定..."
+echo "[12/13] 自動バックアップ設定..."
 set system task-scheduler task daily-backup crontab-spec '0 3 * * *'
 set system task-scheduler task daily-backup executable path '/config/scripts/backup.sh'
 
 # ============================================
 # 設定を適用・保存
 # ============================================
-echo "[12/12] 設定を適用・保存..."
+echo "[13/13] 設定を適用・保存..."
 commit
 save
 

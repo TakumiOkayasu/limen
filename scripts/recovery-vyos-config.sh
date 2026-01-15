@@ -41,6 +41,8 @@ set system time-zone 'Asia/Tokyo'
 # NTP
 set service ntp server ntp.nict.jp
 set service ntp server ntp.jst.mfeed.ad.jp
+set service ntp allow-client address '192.168.0.0/16'
+set service ntp allow-client address 'fc00::/7'
 
 # LAN側IP (SSH用)
 set interfaces ethernet eth2 address '192.168.1.1/24'
@@ -284,7 +286,21 @@ commit
 save
 
 ============================================
-STEP 11: 自動バックアップ
+STEP 11: システム設定
+============================================
+
+configure
+
+set system config-management commit-revisions '100'
+set system console device ttyS0 speed '115200'
+set system syslog local facility all level 'info'
+set system syslog local facility local7 level 'debug'
+
+commit
+save
+
+============================================
+STEP 12: 自動バックアップ
 ============================================
 
 sudo mkdir -p /config/backup /config/scripts
@@ -307,7 +323,7 @@ commit
 save
 
 ============================================
-STEP 12: r8126モジュール確認
+STEP 13: r8126モジュール確認
 ============================================
 
 sudo modprobe r8126
