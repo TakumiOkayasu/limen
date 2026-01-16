@@ -24,7 +24,7 @@ log_info "Running pre-commit in Docker..."
 if docker run --rm \
     -v "${REPO_ROOT}:/workspace" \
     -w /workspace \
-    python:3.12-slim \
+    python:3-slim \
     sh -c '
         apt-get update -qq && apt-get install -qq -y git > /dev/null 2>&1
         pip install --quiet --root-user-action=ignore --upgrade pip
