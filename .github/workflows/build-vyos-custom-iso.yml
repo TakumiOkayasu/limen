@@ -32,10 +32,11 @@ on:
         options:
           - generic
           - cloud-init
-  pull_request:
-    paths:
-      - ".github/workflows/build-vyos-custom-iso.yml"
-      - "scripts/ci/**"
+  # PRトリガーは無料枠消費が激しいため無効化
+  # pull_request:
+  #   paths:
+  #     - ".github/workflows/build-vyos-custom-iso.yml"
+  #     - "scripts/ci/**"
 
 permissions:
   contents: write
