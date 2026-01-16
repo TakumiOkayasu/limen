@@ -212,7 +212,7 @@ jobs:
           # Check for ISO
           if [ -d "build" ]; then
             ls -la build/
-            ISO_FILE=$(ls -1 build/*.iso 2>/dev/null | head -1 || true)
+            ISO_FILE=$(find build -maxdepth 1 -name "*.iso" -type f | head -1 || true)
             if [ -n "${ISO_FILE}" ]; then
               echo "ISO file: ${ISO_FILE}"
               echo "Size: $(du -h "${ISO_FILE}" | cut -f1)"
@@ -252,8 +252,8 @@ jobs:
           set -euo pipefail
           cd vyos-build
 
-          ISO_FILE=$(ls -1 build/*.iso 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-          DEB_FILES=$(ls -1 custom-packages/*.deb 2>/dev/null | xargs -I {} basename {} 2>/dev/null | jq -R . | jq -s . || echo "[]")
+          ISO_FILE=$(find build -maxdepth 1 -name "*.iso" -type f -exec basename {} \; 2>/dev/null | head -1 || echo "")
+          DEB_FILES=$(find custom-packages -maxdepth 1 -name "*.deb" -type f -exec basename {} \; 2>/dev/null | jq -R . | jq -s . || echo "[]")
 
           cat > build-manifest.json << EOF
           {
