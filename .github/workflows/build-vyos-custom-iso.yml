@@ -101,7 +101,7 @@ jobs:
 
       - name: Cache vyos-build repository
         id: cache-vyos-build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: vyos-build/.git
           key: vyos-build-git-${{ env.CACHE_VERSION }}-${{ steps.vars.outputs.branch }}-${{ hashFiles('.github/workflows/build-vyos-custom-iso.yml') }}
@@ -110,13 +110,13 @@ jobs:
 
       - name: Cache kernel source
         id: cache-kernel
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: kernel-cache
           key: kernel-src-${{ env.CACHE_VERSION }}-${{ steps.vars.outputs.kernel_version }}
 
       - name: Cache ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ccache-cache
           key: ccache-${{ env.CACHE_VERSION }}-${{ steps.vars.outputs.kernel_version }}-${{ hashFiles('.github/workflows/build-vyos-custom-iso.yml') }}
