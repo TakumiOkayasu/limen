@@ -345,18 +345,19 @@ jobs:
           echo "Cleaning up build artifacts for cache..."
 
           # vyos-build内のビルド成果物を削除 (.gitは保持)
+          # Docker内でroot権限で作成されたファイルがあるためsudoが必要
           if [ -d "vyos-build" ]; then
             cd vyos-build
             # buildディレクトリとkernel-buildを削除
-            rm -rf build kernel-build packages custom-packages
+            sudo rm -rf build kernel-build packages custom-packages
             # その他の生成ファイルを削除
-            rm -rf ./*.iso ./*.log build-script.sh build-manifest.json
+            sudo rm -rf ./*.iso ./*.log build-script.sh build-manifest.json
             cd ..
           fi
 
           # ccacheの不要なtmpファイルを削除
           if [ -d "ccache-cache" ]; then
-            find ccache-cache -name "*.tmp" -delete 2>/dev/null || true
+            sudo find ccache-cache -name "*.tmp" -delete 2>/dev/null || true
           fi
 
           echo "Cleanup completed"
