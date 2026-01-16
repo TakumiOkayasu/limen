@@ -9,13 +9,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Claude Code 起動直後、作業開始前に必ず以下を実行すること:**
 
 1. **この CLAUDE.md を最後まで読む**
-2. **`docs/` ディレクトリ内のドキュメントを確認する**
-   - 特に `docs/reference.md` (機器情報、MACアドレス一覧、環境情報)
-   - **`docs/hardware-specs.md`** (使用機材の詳細スペック、ポート数、対応速度)
+2. **`secrets/docs/` ディレクトリ内のドキュメントを確認する**
+   - 特に `secrets/docs/reference.md` (機器情報、MACアドレス一覧、環境情報)
+   - **`secrets/docs/hardware-specs.md`** (使用機材の詳細スペック、ポート数、対応速度)
    - 関連する phase ドキュメント
    - トラブルシューティング履歴
-3. **過去の失敗パターンを確認する** (`docs/troubleshooting-*.md`, `docs/failure-log-*.md`)
-4. **使用機材について質問する前に `docs/hardware-specs.md` を確認する**
+3. **過去の失敗パターンを確認する** (`secrets/docs/troubleshooting-*.md`, `secrets/docs/failure-log-*.md`)
+4. **使用機材について質問する前に `secrets/docs/hardware-specs.md` を確認する**
    - WebSearchやユーザーに確認する前に**必ず**このファイルを読む
    - MACアドレス、ポート数、対応速度、物理接続図が記載されている
 
@@ -156,24 +156,24 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 ## 実装順序チェックリスト
 
 ### Phase 0: VyOSインストール・基本設定
-→ [docs/phase0-install.md](docs/phase0-install.md)
+→ [secrets/docs/phase0-install.md](secrets/docs/phase0-install.md)
 
 - [x] 0-1: VyOSインストール (2025-12-31完了)
 - [x] 0-2: タイムゾーン・NTP設定 (Asia/Tokyo, ntp.nict.jp等)
 - [x] 0-3: 管理者パスワード変更
 
 ### Phase 1: LAN側SSH有効化
-→ [docs/phase1-ssh.md](docs/phase1-ssh.md)
+→ [secrets/docs/phase1-ssh.md](secrets/docs/phase1-ssh.md)
 
 - [x] 1-1: SSH有効化（LAN側 192.168.1.1 のみ）
 - [x] 1-2: SSH公開鍵登録（ed25519, パスワード認証無効）
 
 ### Phase 2: IPv6基盤構築
-→ [docs/phase2-ipv6.md](docs/phase2-ipv6.md)
+→ [secrets/docs/phase2-ipv6.md](secrets/docs/phase2-ipv6.md)
 
 - [x] 2-1: RA受信・DHCPv6-PD取得 (2404:7a82:4d02:4100::/56)
   - DUID-LL形式必須: `00:03:00:01:MAC`
-  - 詳細は [troubleshooting-dhcpv6-pd.md](docs/troubleshooting-dhcpv6-pd.md)
+  - 詳細は [troubleshooting-dhcpv6-pd.md](secrets/docs/troubleshooting-dhcpv6-pd.md)
 - [x] 2-2: LAN側RA配布設定 (2026-01-06完了)
   - eth2で ::/64 配布
   - DNS: Cloudflare + Google
@@ -182,7 +182,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
   - ICMPv6, DHCPv6許可
 
 ### Phase 3: WireGuard VPN
-→ [docs/phase3-wireguard.md](docs/phase3-wireguard.md)
+→ [secrets/docs/phase3-wireguard.md](secrets/docs/phase3-wireguard.md)
 
 - [x] 3-1: WireGuard鍵生成・インターフェース作成 (2026-01-13完了)
   - wg0: 10.10.10.1/24, fd00:10:10:10::1/64
@@ -198,7 +198,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
   - iPhone: 10.10.10.3
 
 ### Phase 4: WXR隔離・IPv4ルーティング
-→ [docs/phase4-wxr-routing.md](docs/phase4-wxr-routing.md)
+→ [secrets/docs/phase4-wxr-routing.md](secrets/docs/phase4-wxr-routing.md)
 
 - [x] 4-1: L2スイッチ経由でWXRをONUに接続 (2026-01-06完了)
 - [x] 4-2: WXR MAP-E専用化 (完了)
@@ -213,7 +213,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
   - LAN → WXR → MAP-E → インターネット 疎通確認済み
 
 ### Phase 5: 運用設定
-→ [docs/phase5-operations.md](docs/phase5-operations.md)
+→ [secrets/docs/phase5-operations.md](secrets/docs/phase5-operations.md)
 
 - [x] 5-1: Cloudflare DDNS設定 (2026-01-13完了)
   - router.murata-lab.net → IPv6自動更新
@@ -222,7 +222,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
   - input/forward filter default-log有効
 
 ### Phase 6: バックアップ体制
-→ [docs/phase6-backup.md](docs/phase6-backup.md)
+→ [secrets/docs/phase6-backup.md](secrets/docs/phase6-backup.md)
 
 - [x] 6-1: VyOS設定バックアップ (完了)
   - 日次自動バックアップ: /config/scripts/backup.sh (毎日3:00)
@@ -233,7 +233,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 ---
 
 ## リファレンス
-→ [docs/reference.md](docs/reference.md)
+→ [secrets/docs/reference.md](secrets/docs/reference.md)
 
 - VyOS基本操作
 - ルーティング方針
@@ -245,23 +245,23 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 
 ## トラブルシューティング
 
-- [IPv6疎通問題](docs/troubleshooting-ipv6.md) - チェックリスト、過去の失敗パターン、VyOS制約
-- [DHCPv6-PD取得問題](docs/troubleshooting-dhcpv6-pd.md) - DUID-LL形式が必須
-- [RA設定消失](docs/troubleshooting-ra-missing.md) - クライアントがIPv6取得できない場合の診断手順
-- [カーネル更新失敗](docs/failure-log-2026-01-07-kernel-update.md) - MODULE_SIG_FORCE問題
+- [IPv6疎通問題](secrets/docs/troubleshooting-ipv6.md) - チェックリスト、過去の失敗パターン、VyOS制約
+- [DHCPv6-PD取得問題](secrets/docs/troubleshooting-dhcpv6-pd.md) - DUID-LL形式が必須
+- [RA設定消失](secrets/docs/troubleshooting-ra-missing.md) - クライアントがIPv6取得できない場合の診断手順
+- [カーネル更新失敗](secrets/docs/failure-log-2026-01-07-kernel-update.md) - MODULE_SIG_FORCE問題
 
 ---
 
 ## 復旧用リソース
 
-→ **[docs/disaster-recovery.md](docs/disaster-recovery.md)** - 災害復旧ガイド (詳細手順)
+→ **[secrets/docs/disaster-recovery.md](secrets/docs/disaster-recovery.md)** - 災害復旧ガイド (詳細手順)
 
 | ファイル | 用途 |
 |----------|------|
-| `scripts/vyos-restore.env.example` | シークレット値テンプレート |
-| `scripts/generate-vyos-restore.sh` | vbashスクリプト生成ツール |
-| `scripts/recovery-vyos-config.sh` | 手動復元用の手順表示 |
-| `scripts/backup-vyos-config.txt` | 設定コマンド一覧 (参照用) |
+| `secrets/scripts/vyos-restore.env.example` | シークレット値テンプレート |
+| `secrets/scripts/generate-vyos-restore.sh` | vbashスクリプト生成ツール |
+| `secrets/scripts/recovery-vyos-config.sh` | 手動復元用の手順表示 |
+| `secrets/scripts/backup-vyos-config.txt` | 設定コマンド一覧 (参照用) |
 
 ---
 
