@@ -27,7 +27,8 @@ readonly DEFCONFIG_PATH="/vyos/scripts/package-build/linux-kernel/arch/x86/confi
 
 readonly KERNEL_DIR="${WORK_DIR}/linux-${KERNEL_VERSION}"
 readonly KVER="${KERNEL_VERSION}-vyos"
-readonly MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d. -f1)
+MAJOR_VERSION=$(echo "$KERNEL_VERSION" | cut -d. -f1)
+readonly MAJOR_VERSION
 
 # Driver versions
 readonly R8126_VERSION="10.016.00"
@@ -90,11 +91,18 @@ Architecture: amd64
 CTRL
 
     # Append optional fields conditionally (avoids empty lines)
-    # Note: || true ensures set -e doesn't cause script exit when field is empty
-    [ -n "$depends" ]   && echo "Depends: $depends"     >> "${pkg_dir}/DEBIAN/control" || true
-    [ -n "$provides" ]  && echo "Provides: $provides"   >> "${pkg_dir}/DEBIAN/control" || true
-    [ -n "$conflicts" ] && echo "Conflicts: $conflicts" >> "${pkg_dir}/DEBIAN/control" || true
-    [ -n "$replaces" ]  && echo "Replaces: $replaces"   >> "${pkg_dir}/DEBIAN/control" || true
+    if [ -n "$depends" ]; then
+        echo "Depends: $depends" >> "${pkg_dir}/DEBIAN/control"
+    fi
+    if [ -n "$provides" ]; then
+        echo "Provides: $provides" >> "${pkg_dir}/DEBIAN/control"
+    fi
+    if [ -n "$conflicts" ]; then
+        echo "Conflicts: $conflicts" >> "${pkg_dir}/DEBIAN/control"
+    fi
+    if [ -n "$replaces" ]; then
+        echo "Replaces: $replaces" >> "${pkg_dir}/DEBIAN/control"
+    fi
 
     # Append final required fields
     cat >> "${pkg_dir}/DEBIAN/control" << CTRL
@@ -108,14 +116,14 @@ depmod -a ${KVER} || true
 POST
     chmod 755 "${pkg_dir}/DEBIAN/postinst"
 
-    dpkg-deb --build "${pkg_dir}" "${CUSTOM_PKG_DIR}/${pkg_name}_${pkg_version}_amd64.deb"
+    sudo dpkg-deb --build "${pkg_dir}" "${CUSTOM_PKG_DIR}/${pkg_name}_${pkg_version}_amd64.deb"
 }
 
 # Sign kernel module
 sign_module() {
     local module_file=$1
 
-    "${KERNEL_DIR}/scripts/sign-file" sha512 \
+    sudo "${KERNEL_DIR}/scripts/sign-file" sha512 \
         "${KERNEL_DIR}/certs/signing_key.pem" \
         "${KERNEL_DIR}/certs/signing_key.pem" \
         "${module_file}"
@@ -145,14 +153,14 @@ build_kernel() {
     export PATH="/usr/lib/ccache:$PATH"
     ccache -s || true
 
-    mkdir -p "${WORK_DIR}" "${CUSTOM_PKG_DIR}"
+    sudo mkdir -p "${WORK_DIR}" "${CUSTOM_PKG_DIR}"
     cd "${WORK_DIR}"
 
     # Download or use cached kernel source
     local kernel_tarball="linux-${KERNEL_VERSION}.tar.xz"
     if [ -f "/kernel-cache/${kernel_tarball}" ]; then
         log_info "Using cached kernel source..."
-        cp "/kernel-cache/${kernel_tarball}" .
+        sudo cp "/kernel-cache/${kernel_tarball}" .
     else
         log_info "Downloading kernel ${KERNEL_VERSION}..."
         curl -L -O "https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/${kernel_tarball}"
@@ -170,17 +178,17 @@ build_kernel() {
             log_info "Checksum file not available, skipping verification"
         fi
 
-        cp "${kernel_tarball}" "/kernel-cache/" || true
+        sudo cp "${kernel_tarball}" "/kernel-cache/" || true
     fi
 
-    tar xf "${kernel_tarball}"
+    sudo tar xf "${kernel_tarball}"
     cd "linux-${KERNEL_VERSION}"
 
     # Apply VyOS defconfig
     if [ -f "${DEFCONFIG_PATH}" ]; then
         log_info "Using VyOS defconfig from scripts/package-build..."
-        cp "${DEFCONFIG_PATH}" .config
-        make olddefconfig
+        sudo cp "${DEFCONFIG_PATH}" .config
+        sudo make olddefconfig
     else
         log_error "VyOS defconfig not found at ${DEFCONFIG_PATH}"
         find /vyos -name "vyos_defconfig" -type f 2>/dev/null || true
@@ -189,21 +197,21 @@ build_kernel() {
 
     # Generate module signing keys
     log_info "Generating module signing keys..."
-    mkdir -p certs
+    sudo mkdir -p certs
 
     # x509.genkey content (base64 encoded)
-    echo "W3JlcV0KZGVmYXVsdF9iaXRzID0gNDA5NgpkaXN0aW5ndWlzaGVkX25hbWUgPSByZXFfZGlzdGluZ3Vpc2hlZF9uYW1lCnByb21wdCA9IG5vCng1MDlfZXh0ZW5zaW9ucyA9IHYzX2NhCgpbcmVxX2Rpc3Rpbmd1aXNoZWRfbmFtZV0KQ04gPSBWeU9TIE1vZHVsZSBTaWduaW5nIEtleQplbWFpbEFkZHJlc3MgPSBidWlsZEB2eW9zLmxvY2FsCgpbdjNfY2FdCmJhc2ljQ29uc3RyYWludHM9Y3JpdGljYWwsQ0E6RkFMU0UKa2V5VXNhZ2U9ZGlnaXRhbFNpZ25hdHVyZQpzdWJqZWN0S2V5SWRlbnRpZmllcj1oYXNoCmF1dGhvcml0eUtleUlkZW50aWZpZXI9a2V5aWQK" | base64 -d > x509.genkey
+    echo "W3JlcV0KZGVmYXVsdF9iaXRzID0gNDA5NgpkaXN0aW5ndWlzaGVkX25hbWUgPSByZXFfZGlzdGluZ3Vpc2hlZF9uYW1lCnByb21wdCA9IG5vCng1MDlfZXh0ZW5zaW9ucyA9IHYzX2NhCgpbcmVxX2Rpc3Rpbmd1aXNoZWRfbmFtZV0KQ04gPSBWeU9TIE1vZHVsZSBTaWduaW5nIEtleQplbWFpbEFkZHJlc3MgPSBidWlsZEB2eW9zLmxvY2FsCgpbdjNfY2FdCmJhc2ljQ29uc3RyYWludHM9Y3JpdGljYWwsQ0E6RkFMU0UKa2V5VXNhZ2U9ZGlnaXRhbFNpZ25hdHVyZQpzdWJqZWN0S2V5SWRlbnRpZmllcj1oYXNoCmF1dGhvcml0eUtleUlkZW50aWZpZXI9a2V5aWQK" | base64 -d | sudo tee x509.genkey > /dev/null
 
-    openssl req -new -nodes -utf8 -sha512 -days 36500 \
+    sudo openssl req -new -nodes -utf8 -sha512 -days 36500 \
         -batch -x509 -config x509.genkey \
         -outform PEM -out certs/signing_key.pem \
         -keyout certs/signing_key.pem
 
     # Configure module signing
-    ./scripts/config --set-str MODULE_SIG_KEY "certs/signing_key.pem"
-    ./scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
-    ./scripts/config --enable MODULE_SIG_ALL
-    make olddefconfig
+    sudo ./scripts/config --set-str MODULE_SIG_KEY "certs/signing_key.pem"
+    sudo ./scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+    sudo ./scripts/config --enable MODULE_SIG_ALL
+    sudo make olddefconfig
 
     # Verify MODULE_SIG settings
     log_info "Verifying MODULE_SIG settings..."
@@ -219,50 +227,50 @@ build_kernel() {
     log_info "MODULE_SIG is properly configured."
 
     # Initialize git for deb-pkg
-    git init
-    git config user.email "build@vyos.local"
-    git config user.name "VyOS Kernel Builder"
-    git add -A
-    git commit -m "Initial commit for kernel build"
+    sudo git init
+    sudo git config user.email "build@vyos.local"
+    sudo git config user.name "VyOS Kernel Builder"
+    sudo git add -A
+    sudo git commit -m "Initial commit for kernel build"
 
     # Disable debug info to speed up build
-    ./scripts/config --disable DEBUG_INFO
-    ./scripts/config --disable DEBUG_INFO_DWARF4
-    ./scripts/config --disable DEBUG_INFO_DWARF5
-    ./scripts/config --disable DEBUG_INFO_BTF
+    sudo ./scripts/config --disable DEBUG_INFO
+    sudo ./scripts/config --disable DEBUG_INFO_DWARF4
+    sudo ./scripts/config --disable DEBUG_INFO_DWARF5
+    sudo ./scripts/config --disable DEBUG_INFO_BTF
 
     # Disable unused drivers/features for router use case
     # NOTE: USB_SUPPORT must remain ENABLED for USB boot/installation
-    ./scripts/config --disable SOUND || true
-    ./scripts/config --disable MEDIA_SUPPORT || true
-    ./scripts/config --disable WIRELESS || true
-    ./scripts/config --disable CFG80211 || true
-    ./scripts/config --disable MAC80211 || true
-    ./scripts/config --disable DRM || true
-    ./scripts/config --disable STAGING || true
+    sudo ./scripts/config --disable SOUND || true
+    sudo ./scripts/config --disable MEDIA_SUPPORT || true
+    sudo ./scripts/config --disable WIRELESS || true
+    sudo ./scripts/config --disable CFG80211 || true
+    sudo ./scripts/config --disable MAC80211 || true
+    sudo ./scripts/config --disable DRM || true
+    sudo ./scripts/config --disable STAGING || true
 
     # Enable Intel 10GbE driver (disabled in VyOS defconfig, required for X540-T2)
     # VyOS uses out-of-tree vyos-intel-ixgbe package, but it's signed with VyOS key
     # Building in-tree ensures the module is signed with our custom key
-    ./scripts/config --module IXGBE
-    ./scripts/config --module IXGBEVF
+    sudo ./scripts/config --module IXGBE
+    sudo ./scripts/config --module IXGBEVF
 
-    make olddefconfig
+    sudo make olddefconfig
 
     # Build kernel
     log_info "Building kernel with $(nproc) cores..."
-    make -j"$(nproc)" CC="ccache gcc" deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1-1
+    sudo make -j"$(nproc)" CC="ccache gcc" deb-pkg LOCALVERSION=-vyos KDEB_PKGVERSION=1-1
 
     # Show ccache stats
     log_info "ccache stats:"
     ccache -s || true
 
     # Save kernel packages
-    mv ../*.deb "${CUSTOM_PKG_DIR}/"
+    sudo mv ../*.deb "${CUSTOM_PKG_DIR}/"
 
     # Save signing key for verification
-    openssl x509 -in "${KERNEL_DIR}/certs/signing_key.pem" -outform DER -out "${CUSTOM_PKG_DIR}/signing_key.x509"
-    cp "${KERNEL_DIR}/.config" "${CUSTOM_PKG_DIR}/kernel-config"
+    sudo openssl x509 -in "${KERNEL_DIR}/certs/signing_key.pem" -outform DER -out "${CUSTOM_PKG_DIR}/signing_key.x509"
+    sudo cp "${KERNEL_DIR}/.config" "${CUSTOM_PKG_DIR}/kernel-config"
 
     log_info "Kernel packages:"
     ls -la "${CUSTOM_PKG_DIR}/"
@@ -280,10 +288,10 @@ build_r8126() {
     cd "r8126-${R8126_VERSION}/src"
 
     log_info "Building r8126 module against ${KERNEL_DIR}..."
-    make -C "${KERNEL_DIR}" M="$(pwd)" modules
+    sudo make -C "${KERNEL_DIR}" M="$(pwd)" modules
 
     sign_module r8126.ko
-    cp r8126.ko "${CUSTOM_PKG_DIR}/r8126-signed.ko"
+    sudo cp r8126.ko "${CUSTOM_PKG_DIR}/r8126-signed.ko"
 
     create_module_deb \
         "r8126-modules" \
@@ -306,10 +314,10 @@ build_iso() {
 
     # Copy custom packages to packages/ directory
     log_info "Copying custom packages to packages/ directory..."
-    mkdir -p /vyos/packages
-    cp "${CUSTOM_PKG_DIR}"/linux-image-*.deb /vyos/packages/
-    cp "${CUSTOM_PKG_DIR}"/linux-headers-*.deb /vyos/packages/ || true
-    cp "${CUSTOM_PKG_DIR}"/r8126-modules_*.deb /vyos/packages/
+    sudo mkdir -p /vyos/packages
+    sudo cp "${CUSTOM_PKG_DIR}"/linux-image-*.deb /vyos/packages/
+    sudo cp "${CUSTOM_PKG_DIR}"/linux-headers-*.deb /vyos/packages/ || true
+    sudo cp "${CUSTOM_PKG_DIR}"/r8126-modules_*.deb /vyos/packages/
 
     log_info "Packages to be included in ISO:"
     ls -la /vyos/packages/
@@ -329,7 +337,7 @@ build_iso() {
     # Verify ISO contents
     log_info "Verifying ISO contents..."
     local iso_file
-    iso_file=$(ls -1 /vyos/build/*.iso 2>/dev/null | head -1)
+    iso_file=$(find /vyos/build -maxdepth 1 -name "*.iso" -type f 2>/dev/null | head -1)
     if [ -n "${iso_file}" ]; then
         log_info "Checking ISO for custom kernel..."
         mkdir -p /tmp/iso-check

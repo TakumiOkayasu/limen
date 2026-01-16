@@ -132,6 +132,33 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - **マージ後の後片付けもAIの仕事** - `git checkout main && git pull && git branch -d <branch>`
 - **DependabotのPRは変更しない** - Dependabotが作成したPRの内容には手を加えない。マージ/クローズの判断のみユーザーが行う
 
+---
+
+## Lintルール
+
+**重要**: Lintの警告は全て修正すること。「既存の警告」も例外ではない。
+
+### pre-commit (Docker)
+
+コミット前に自動でLintが実行される。手動実行も可能:
+
+```bash
+# pre-commit hookをインストール
+ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+
+# 手動実行
+./scripts/pre-commit
+```
+
+pre-commitはDocker内でPythonのpre-commitフレームワークを使用し、以下をチェック:
+- **actionlint** - GitHub Actions workflow
+- **shellcheck** - シェルスクリプト
+
+### Lintルール
+
+- **警告は全て修正** - 「info」レベルも含む
+- **既存コードの警告も修正** - 触ったファイルの警告は全て直す
+
 ### CI失敗時の調査
 
 **CIの失敗を調査する際は `gh` コマンドを使用する**:
