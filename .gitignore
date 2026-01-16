@@ -7,6 +7,9 @@ credentials/
 scripts/vyos-restore.env
 scripts/vyos-restore.vbash
 
+# シークレットドキュメント（パブリック化時に除外）
+secret/
+
 # VyOS設定バックアップ（機密情報を含む可能性）
 *.boot
 

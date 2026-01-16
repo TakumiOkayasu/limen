@@ -1,12 +1,15 @@
 name: Lint Workflows
 
 on:
-  push:
-    paths:
-      - ".github/workflows/**"
-  pull_request:
-    paths:
-      - ".github/workflows/**"
+  # 手動実行のみ (無料枠節約)
+  workflow_dispatch:
+  # pushとPRトリガーは無効化
+  # push:
+  #   paths:
+  #     - ".github/workflows/**"
+  # pull_request:
+  #   paths:
+  #     - ".github/workflows/**"
 
 jobs:
   actionlint:
