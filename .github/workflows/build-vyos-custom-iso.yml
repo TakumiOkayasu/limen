@@ -275,7 +275,7 @@ jobs:
           cat build-manifest.json
 
       - name: Upload ISO artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vyos-custom-iso-${{ steps.vars.outputs.version }}
           path: |
@@ -286,7 +286,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload kernel packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vyos-kernel-packages-${{ steps.vars.outputs.version }}
           path: |
@@ -295,7 +295,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload signed modules
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: signed-modules-${{ steps.vars.outputs.version }}
           path: |
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload build manifest
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-manifest-${{ steps.vars.outputs.version }}
           path: vyos-build/build-manifest.json
@@ -316,7 +316,7 @@ jobs:
 
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-log-${{ steps.vars.outputs.version }}
           path: |
