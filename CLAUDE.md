@@ -132,6 +132,25 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - **マージ後の後片付けもAIの仕事** - `git checkout main && git pull && git branch -d <branch>`
 - **DependabotのPRは変更しない** - Dependabotが作成したPRの内容には手を加えない。マージ/クローズの判断のみユーザーが行う
 
+### CI失敗時の調査
+
+**CIの失敗を調査する際は `gh` コマンドを使用する**:
+
+```bash
+# 最近のCI実行一覧
+gh run list --limit 10
+
+# 失敗したログを取得
+gh run view <run_id> --log-failed
+
+# 特定のエラーを検索
+gh run view <run_id> --log | grep -E "error|failed|ERROR"
+
+# 成功したCIと比較する場合
+gh run list --status success --limit 5
+gh run view <成功したrun_id> --log | grep <検索キーワード>
+```
+
 ---
 
 ## 実装順序チェックリスト
