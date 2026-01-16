@@ -10,6 +10,8 @@
 # Optional environment variables:
 #   CCACHE_DIR     - ccache directory (default: /ccache)
 #   CCACHE_MAXSIZE - ccache max size (default: 5G)
+#
+# NOTE: All commands use sudo to avoid permission issues in Docker environment
 
 set -euo pipefail
 
@@ -75,14 +77,14 @@ create_module_deb() {
     local replaces=${9:-""}
 
     local pkg_dir=/tmp/${pkg_name}-pkg
-    rm -rf "${pkg_dir}"
-    mkdir -p "${pkg_dir}/${module_dest_dir}"
-    mkdir -p "${pkg_dir}/DEBIAN"
+    sudo rm -rf "${pkg_dir}"
+    sudo mkdir -p "${pkg_dir}/${module_dest_dir}"
+    sudo mkdir -p "${pkg_dir}/DEBIAN"
 
-    cp "${module_file}" "${pkg_dir}/${module_dest_dir}/"
+    sudo cp "${module_file}" "${pkg_dir}/${module_dest_dir}/"
 
     # Write required fields first
-    cat > "${pkg_dir}/DEBIAN/control" << CTRL
+    sudo tee "${pkg_dir}/DEBIAN/control" > /dev/null << CTRL
 Package: ${pkg_name}
 Version: ${pkg_version}
 Section: kernel
@@ -92,29 +94,29 @@ CTRL
 
     # Append optional fields conditionally (avoids empty lines)
     if [ -n "$depends" ]; then
-        echo "Depends: $depends" >> "${pkg_dir}/DEBIAN/control"
+        echo "Depends: $depends" | sudo tee -a "${pkg_dir}/DEBIAN/control" > /dev/null
     fi
     if [ -n "$provides" ]; then
-        echo "Provides: $provides" >> "${pkg_dir}/DEBIAN/control"
+        echo "Provides: $provides" | sudo tee -a "${pkg_dir}/DEBIAN/control" > /dev/null
     fi
     if [ -n "$conflicts" ]; then
-        echo "Conflicts: $conflicts" >> "${pkg_dir}/DEBIAN/control"
+        echo "Conflicts: $conflicts" | sudo tee -a "${pkg_dir}/DEBIAN/control" > /dev/null
     fi
     if [ -n "$replaces" ]; then
-        echo "Replaces: $replaces" >> "${pkg_dir}/DEBIAN/control"
+        echo "Replaces: $replaces" | sudo tee -a "${pkg_dir}/DEBIAN/control" > /dev/null
     fi
 
     # Append final required fields
-    cat >> "${pkg_dir}/DEBIAN/control" << CTRL
+    sudo tee -a "${pkg_dir}/DEBIAN/control" > /dev/null << CTRL
 Maintainer: github-actions@murata-lab.net
 Description: ${description}
 CTRL
 
-    cat > "${pkg_dir}/DEBIAN/postinst" << POST
+    sudo tee "${pkg_dir}/DEBIAN/postinst" > /dev/null << POST
 #!/bin/bash
 depmod -a ${KVER} || true
 POST
-    chmod 755 "${pkg_dir}/DEBIAN/postinst"
+    sudo chmod 755 "${pkg_dir}/DEBIAN/postinst"
 
     sudo dpkg-deb --build "${pkg_dir}" "${CUSTOM_PKG_DIR}/${pkg_name}_${pkg_version}_amd64.deb"
 }
@@ -128,7 +130,7 @@ sign_module() {
         "${KERNEL_DIR}/certs/signing_key.pem" \
         "${module_file}"
 
-    if strings "${module_file}" | grep -q "~Module signature appended~"; then
+    if sudo strings "${module_file}" | grep -q "~Module signature appended~"; then
         log_info "SUCCESS: $(basename "${module_file}") is signed"
     else
         log_error "$(basename "${module_file}") signature not detected"
@@ -151,7 +153,7 @@ build_kernel() {
 
     # Setup ccache
     export PATH="/usr/lib/ccache:$PATH"
-    ccache -s || true
+    sudo ccache -s || true
 
     sudo mkdir -p "${WORK_DIR}" "${CUSTOM_PKG_DIR}"
     cd "${WORK_DIR}"
@@ -163,13 +165,13 @@ build_kernel() {
         sudo cp "/kernel-cache/${kernel_tarball}" .
     else
         log_info "Downloading kernel ${KERNEL_VERSION}..."
-        curl -L -O "https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/${kernel_tarball}"
+        sudo curl -L -O "https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/${kernel_tarball}"
 
         # Verify checksum
         log_info "Verifying kernel source checksum..."
-        curl -sL "https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/sha256sums.asc" -o sha256sums.asc || true
-        if grep -q "${kernel_tarball}" sha256sums.asc 2>/dev/null; then
-            grep "${kernel_tarball}" sha256sums.asc | sha256sum -c - || {
+        sudo curl -sL "https://cdn.kernel.org/pub/linux/kernel/v${MAJOR_VERSION}.x/sha256sums.asc" -o sha256sums.asc || true
+        if sudo grep -q "${kernel_tarball}" sha256sums.asc 2>/dev/null; then
+            sudo grep "${kernel_tarball}" sha256sums.asc | sudo sha256sum -c - || {
                 log_error "Kernel source checksum verification failed!"
                 exit 1
             }
@@ -191,7 +193,7 @@ build_kernel() {
         sudo make olddefconfig
     else
         log_error "VyOS defconfig not found at ${DEFCONFIG_PATH}"
-        find /vyos -name "vyos_defconfig" -type f 2>/dev/null || true
+        sudo find /vyos -name "vyos_defconfig" -type f 2>/dev/null || true
         exit 1
     fi
 
@@ -215,12 +217,12 @@ build_kernel() {
 
     # Verify MODULE_SIG settings
     log_info "Verifying MODULE_SIG settings..."
-    grep -E "MODULE_SIG|SYSTEM_TRUSTED" .config || true
-    if ! grep -q "CONFIG_MODULE_SIG=y" .config; then
+    sudo grep -E "MODULE_SIG|SYSTEM_TRUSTED" .config || true
+    if ! sudo grep -q "CONFIG_MODULE_SIG=y" .config; then
         log_error "CONFIG_MODULE_SIG is not enabled!"
         exit 1
     fi
-    if ! grep -q "CONFIG_MODULE_SIG_ALL=y" .config; then
+    if ! sudo grep -q "CONFIG_MODULE_SIG_ALL=y" .config; then
         log_error "CONFIG_MODULE_SIG_ALL is not enabled!"
         exit 1
     fi
@@ -263,7 +265,7 @@ build_kernel() {
 
     # Show ccache stats
     log_info "ccache stats:"
-    ccache -s || true
+    sudo ccache -s || true
 
     # Save kernel packages
     sudo mv ../*.deb "${CUSTOM_PKG_DIR}/"
@@ -273,7 +275,7 @@ build_kernel() {
     sudo cp "${KERNEL_DIR}/.config" "${CUSTOM_PKG_DIR}/kernel-config"
 
     log_info "Kernel packages:"
-    ls -la "${CUSTOM_PKG_DIR}/"
+    sudo ls -la "${CUSTOM_PKG_DIR}/"
 }
 
 # =============================================
@@ -283,8 +285,8 @@ build_r8126() {
     log_phase "Phase 2: Build and Sign r8126 Driver"
 
     cd /tmp
-    curl -L -o r8126.tar.bz2 "${R8126_URL}"
-    tar xjf r8126.tar.bz2
+    sudo curl -L -o r8126.tar.bz2 "${R8126_URL}"
+    sudo tar xjf r8126.tar.bz2
     cd "r8126-${R8126_VERSION}/src"
 
     log_info "Building r8126 module against ${KERNEL_DIR}..."
@@ -320,7 +322,7 @@ build_iso() {
     sudo cp "${CUSTOM_PKG_DIR}"/r8126-modules_*.deb /vyos/packages/
 
     log_info "Packages to be included in ISO:"
-    ls -la /vyos/packages/
+    sudo ls -la /vyos/packages/
 
     # Build ISO
     log_info "Building VyOS ISO with custom kernel..."
@@ -332,19 +334,19 @@ build_iso() {
         "${BUILD_TYPE}"
 
     log_info "Build completed"
-    ls -la /vyos/build/
+    sudo ls -la /vyos/build/
 
     # Verify ISO contents
     log_info "Verifying ISO contents..."
     local iso_file
-    iso_file=$(find /vyos/build -maxdepth 1 -name "*.iso" -type f 2>/dev/null | head -1)
+    iso_file=$(sudo find /vyos/build -maxdepth 1 -name "*.iso" -type f 2>/dev/null | head -1)
     if [ -n "${iso_file}" ]; then
         log_info "Checking ISO for custom kernel..."
-        mkdir -p /tmp/iso-check
+        sudo mkdir -p /tmp/iso-check
         sudo mount -o loop "${iso_file}" /tmp/iso-check || true
         if [ -d "/tmp/iso-check/live" ]; then
             log_info "ISO mounted successfully"
-            ls -la /tmp/iso-check/live/ || true
+            sudo ls -la /tmp/iso-check/live/ || true
         fi
         sudo umount /tmp/iso-check || true
     fi
