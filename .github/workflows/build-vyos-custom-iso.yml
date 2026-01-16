@@ -216,7 +216,7 @@ jobs:
             if [ -n "${ISO_FILE}" ]; then
               echo "ISO file: ${ISO_FILE}"
               echo "Size: $(du -h "${ISO_FILE}" | cut -f1)"
-              sha256sum "${ISO_FILE}" | tee "${ISO_FILE}.sha256"
+              sha256sum "${ISO_FILE}" | sudo tee "${ISO_FILE}.sha256"
             else
               echo "WARNING: No ISO file found in build/"
             fi
