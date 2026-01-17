@@ -254,10 +254,28 @@ build_kernel() {
     # Enable Intel 10GbE driver (disabled in VyOS defconfig, required for X540-T2)
     # VyOS uses out-of-tree vyos-intel-ixgbe package, but it's signed with VyOS key
     # Building in-tree ensures the module is signed with our custom key
+    log_info "Enabling Intel IXGBE driver (required for X540-T2)..."
     sudo ./scripts/config --module IXGBE
     sudo ./scripts/config --module IXGBEVF
 
     sudo make olddefconfig
+
+    # Verify IXGBE is enabled
+    log_info "Verifying IXGBE driver configuration..."
+    if sudo grep -q "CONFIG_IXGBE=m" .config; then
+        log_info "SUCCESS: CONFIG_IXGBE=m is set"
+    else
+        log_error "CONFIG_IXGBE is not set to module! Current setting:"
+        sudo grep "IXGBE" .config || echo "IXGBE not found in config"
+        exit 1
+    fi
+    if sudo grep -q "CONFIG_IXGBEVF=m" .config; then
+        log_info "SUCCESS: CONFIG_IXGBEVF=m is set"
+    else
+        log_error "CONFIG_IXGBEVF is not set to module! Current setting:"
+        sudo grep "IXGBEVF" .config || echo "IXGBEVF not found in config"
+        exit 1
+    fi
 
     # Build kernel
     log_info "Building kernel with $(nproc) cores..."
@@ -307,6 +325,108 @@ build_r8126() {
 }
 
 # =============================================
+# Phase 2.5: Create Driver Verification Package
+# =============================================
+build_driver_check_pkg() {
+    log_phase "Phase 2.5: Create Driver Verification Package"
+
+    local pkg_name="vyos-driver-check"
+    local pkg_version="1.0.0"
+    local pkg_dir="/tmp/${pkg_name}-pkg"
+
+    sudo rm -rf "${pkg_dir}"
+    sudo mkdir -p "${pkg_dir}/usr/local/bin"
+    sudo mkdir -p "${pkg_dir}/etc/profile.d"
+    sudo mkdir -p "${pkg_dir}/DEBIAN"
+
+    # Copy driver-check script
+    if [ -f "/vyos/scripts/ci/driver-check.sh" ]; then
+        sudo cp /vyos/scripts/ci/driver-check.sh "${pkg_dir}/usr/local/bin/driver-check"
+        sudo chmod 755 "${pkg_dir}/usr/local/bin/driver-check"
+    else
+        # Create inline if not available (for standalone builds)
+        log_info "Creating driver-check script inline..."
+        sudo tee "${pkg_dir}/usr/local/bin/driver-check" > /dev/null << 'SCRIPT'
+#!/bin/bash
+# VyOS Custom ISO - Driver Verification Script (inline version)
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}=== VyOS Driver Check ===${NC}"
+echo ""
+
+# Check kernel
+echo -e "${BLUE}Kernel:${NC} $(uname -r)"
+
+# Check ixgbe
+echo ""
+if modinfo ixgbe &>/dev/null; then
+    echo -e "${GREEN}[OK]${NC} ixgbe module available"
+    if lsmod | grep -q "^ixgbe"; then
+        echo -e "${GREEN}[OK]${NC} ixgbe module loaded"
+    else
+        echo -e "${BLUE}[INFO]${NC} ixgbe not loaded (no hardware?)"
+    fi
+else
+    echo -e "${RED}[ERROR]${NC} ixgbe module NOT found!"
+fi
+
+# Check r8126
+echo ""
+if modinfo r8126 &>/dev/null; then
+    echo -e "${GREEN}[OK]${NC} r8126 module available"
+    if lsmod | grep -q "^r8126"; then
+        echo -e "${GREEN}[OK]${NC} r8126 module loaded"
+    else
+        echo -e "${BLUE}[INFO]${NC} r8126 not loaded (no hardware?)"
+    fi
+else
+    echo -e "${RED}[ERROR]${NC} r8126 module NOT found!"
+fi
+
+# Show interfaces
+echo ""
+echo -e "${BLUE}Network interfaces:${NC}"
+ip -br link show 2>/dev/null || ip link show
+SCRIPT
+        sudo chmod 755 "${pkg_dir}/usr/local/bin/driver-check"
+    fi
+
+    # Create profile.d script for login notification
+    sudo tee "${pkg_dir}/etc/profile.d/driver-check-hint.sh" > /dev/null << 'PROFILE'
+#!/bin/bash
+# Hint for driver verification on custom VyOS ISO
+if [ -x /usr/local/bin/driver-check ]; then
+    echo ""
+    echo "Custom VyOS ISO: Run 'driver-check' to verify network drivers"
+    echo ""
+fi
+PROFILE
+    sudo chmod 644 "${pkg_dir}/etc/profile.d/driver-check-hint.sh"
+
+    # Create control file
+    sudo tee "${pkg_dir}/DEBIAN/control" > /dev/null << CTRL
+Package: ${pkg_name}
+Version: ${pkg_version}
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: github-actions@murata-lab.net
+Description: VyOS Custom ISO Driver Verification Tool
+ Provides 'driver-check' command to verify that custom network
+ drivers (ixgbe, r8126) are properly installed and working.
+ Run 'driver-check' after USB live boot to verify drivers.
+CTRL
+
+    sudo dpkg-deb --build "${pkg_dir}" "${CUSTOM_PKG_DIR}/${pkg_name}_${pkg_version}_all.deb"
+    log_info "Created ${pkg_name}_${pkg_version}_all.deb"
+}
+
+# =============================================
 # Phase 3: Build VyOS ISO
 # =============================================
 build_iso() {
@@ -320,16 +440,29 @@ build_iso() {
     sudo cp "${CUSTOM_PKG_DIR}"/linux-image-*.deb /vyos/packages/
     sudo cp "${CUSTOM_PKG_DIR}"/linux-headers-*.deb /vyos/packages/ || true
     sudo cp "${CUSTOM_PKG_DIR}"/r8126-modules_*.deb /vyos/packages/
+    sudo cp "${CUSTOM_PKG_DIR}"/vyos-driver-check_*.deb /vyos/packages/
+
+    # Ensure proper permissions for packages directory
+    sudo chmod -R 755 /vyos/packages
+    sudo chown -R root:root /vyos/packages
 
     log_info "Packages to be included in ISO:"
     sudo ls -la /vyos/packages/
+
+    # Generate package index for local repository
+    log_info "Generating package index..."
+    cd /vyos/packages
+    sudo apt-ftparchive packages . | sudo tee Packages > /dev/null
+    sudo gzip -c Packages | sudo tee Packages.gz > /dev/null
+    sudo chmod 644 Packages Packages.gz
+    cd /vyos
 
     # Build ISO
     log_info "Building VyOS ISO with custom kernel..."
     sudo ./build-vyos-image \
         --architecture amd64 \
         --build-by "github-actions@murata-lab.net" \
-        --build-comment "Custom ISO with r8126 driver (kernel ${KERNEL_VERSION})" \
+        --build-comment "Custom ISO with IXGBE+r8126 drivers (kernel ${KERNEL_VERSION})" \
         --version "${VYOS_VERSION}" \
         "${BUILD_TYPE}"
 
@@ -341,12 +474,41 @@ build_iso() {
     local iso_file
     iso_file=$(sudo find /vyos/build -maxdepth 1 -name "*.iso" -type f 2>/dev/null | head -1)
     if [ -n "${iso_file}" ]; then
-        log_info "Checking ISO for custom kernel..."
+        log_info "Checking ISO for custom kernel and drivers..."
         sudo mkdir -p /tmp/iso-check
         sudo mount -o loop "${iso_file}" /tmp/iso-check || true
         if [ -d "/tmp/iso-check/live" ]; then
             log_info "ISO mounted successfully"
             sudo ls -la /tmp/iso-check/live/ || true
+
+            # Extract and verify squashfs contents
+            if [ -f "/tmp/iso-check/live/filesystem.squashfs" ]; then
+                log_info "Extracting squashfs to verify drivers..."
+                sudo mkdir -p /tmp/squashfs-check
+                sudo unsquashfs -d /tmp/squashfs-check -f /tmp/iso-check/live/filesystem.squashfs \
+                    "lib/modules/*/kernel/drivers/net/ethernet/intel/ixgbe/*" \
+                    "lib/modules/*/kernel/drivers/net/ethernet/realtek/r8126*" 2>/dev/null || true
+
+                # Check for IXGBE driver
+                if sudo find /tmp/squashfs-check -name "ixgbe.ko*" 2>/dev/null | grep -q .; then
+                    log_info "SUCCESS: IXGBE driver found in ISO"
+                    sudo find /tmp/squashfs-check -name "ixgbe.ko*" -exec ls -la {} \;
+                else
+                    log_error "WARNING: IXGBE driver NOT found in ISO!"
+                    log_info "Checking all available network drivers..."
+                    sudo unsquashfs -l /tmp/iso-check/live/filesystem.squashfs 2>/dev/null | grep -E "ixgbe|intel" | head -20 || true
+                fi
+
+                # Check for r8126 driver
+                if sudo find /tmp/squashfs-check -name "r8126.ko*" 2>/dev/null | grep -q .; then
+                    log_info "SUCCESS: r8126 driver found in ISO"
+                    sudo find /tmp/squashfs-check -name "r8126.ko*" -exec ls -la {} \;
+                else
+                    log_error "WARNING: r8126 driver NOT found in ISO!"
+                fi
+
+                sudo rm -rf /tmp/squashfs-check
+            fi
         fi
         sudo umount /tmp/iso-check || true
     fi
@@ -363,6 +525,7 @@ main() {
 
     build_kernel
     build_r8126
+    build_driver_check_pkg
     build_iso
 
     log_info "All phases completed successfully!"
