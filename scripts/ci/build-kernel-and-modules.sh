@@ -252,8 +252,9 @@ build_kernel() {
     sudo ./scripts/config --disable STAGING || true
 
     # Enable Intel 10GbE driver (disabled in VyOS defconfig, required for X540-T2)
-    # VyOS uses out-of-tree vyos-intel-ixgbe package, but it's signed with VyOS key
-    # Building in-tree ensures the module is signed with our custom key
+    # VyOS official repository provides vyos-intel-ixgbe package (out-of-tree, signed with VyOS key)
+    # We build in-tree instead to ensure modules are signed with our custom kernel key
+    # APT preferences (configured in build_iso()) block vyos-intel-* to prevent conflicts
     log_info "Enabling Intel IXGBE driver (required for X540-T2)..."
     sudo ./scripts/config --module IXGBE
     sudo ./scripts/config --module IXGBEVF
@@ -457,6 +458,26 @@ build_iso() {
     sudo chmod 644 Packages Packages.gz
     cd /vyos
 
+    # Prevent VyOS official Intel driver packages from overwriting custom kernel modules
+    log_info "Configuring APT preferences to block vyos-intel-* packages..."
+    sudo mkdir -p /vyos/data/live-build-config/includes.chroot/etc/apt/preferences.d
+    sudo tee /vyos/data/live-build-config/includes.chroot/etc/apt/preferences.d/99-block-vyos-intel-drivers > /dev/null << 'EOF'
+# Block VyOS official Intel driver packages to prevent overwriting custom kernel modules
+# Custom kernel already includes IXGBE/IXGBEVF drivers signed with our key
+
+Package: vyos-intel-ixgbe
+Pin: release *
+Pin-Priority: -1
+
+Package: vyos-intel-ixgbevf
+Pin: release *
+Pin-Priority: -1
+
+# Allow other vyos-intel packages (e.g., vyos-intel-qat) if needed
+EOF
+    sudo chmod 644 /vyos/data/live-build-config/includes.chroot/etc/apt/preferences.d/99-block-vyos-intel-drivers
+    log_info "APT preferences configured to block: vyos-intel-ixgbe, vyos-intel-ixgbevf"
+
     # Build ISO
     log_info "Building VyOS ISO with custom kernel..."
     sudo ./build-vyos-image \
@@ -505,6 +526,15 @@ build_iso() {
                     sudo find /tmp/squashfs-check -name "r8126.ko*" -exec ls -la {} \;
                 else
                     log_error "WARNING: r8126 driver NOT found in ISO!"
+                fi
+
+                # Verify APT preferences to block vyos-intel-* packages
+                log_info "Checking APT preferences for vyos-intel package blocking..."
+                if sudo find /tmp/squashfs-check -path "*/etc/apt/preferences.d/99-block-vyos-intel-drivers" 2>/dev/null | grep -q .; then
+                    log_info "SUCCESS: APT preferences found in ISO"
+                    sudo find /tmp/squashfs-check -path "*/etc/apt/preferences.d/99-block-vyos-intel-drivers" -exec cat {} \;
+                else
+                    log_error "WARNING: APT preferences NOT found in ISO!"
                 fi
 
                 sudo rm -rf /tmp/squashfs-check
