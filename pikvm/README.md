@@ -16,7 +16,7 @@ pikvm/
 
 ## セットアップ手順
 
-詳細: [docs/pikvm-setup.md](../docs/pikvm-setup.md)
+詳細: [docs/setup.md](docs/setup.md)
 
 1. **初期セットアップ** - ネットワーク設定、SSH、パスワード変更
 2. **VyOS連携設定** - シリアルコンソール、電源制御
@@ -41,8 +41,8 @@ pikvm/
 
 ## 関連ドキュメント
 
-- セットアップ手順: `docs/pikvm-setup.md`
-- トラブルシューティング: `docs/pikvm-troubleshooting.md`
+- セットアップ手順: [docs/setup.md](docs/setup.md)
+- トラブルシューティング: [docs/troubleshooting.md](docs/troubleshooting.md)
 
 ## 物理接続
 
