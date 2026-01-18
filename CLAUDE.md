@@ -317,29 +317,29 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 
 | ファイル | 用途 |
 |----------|------|
-| `secrets/scripts/vyos_restore.py` | 復元コマンド生成スクリプト (Python) |
-| `secrets/scripts/vyos-restore.env` | シークレット値 (.gitignore対象) |
-| `secrets/scripts/backup-vyos-config.txt` | 設定コマンド一覧 (参照用) |
+| `scripts/vyos_restore.py` | 復元コマンド生成スクリプト (Python) |
+| `scripts/vyos-restore.env` | シークレット値 (.gitignore対象) |
+| `scripts/vyos-config-template.txt` | 設定コマンドテンプレート (参照用) |
 
 ### 復元スクリプトの使い方
 
 ```bash
 # シークレットが揃っているかチェック
-uv run secrets/scripts/vyos_restore.py --check
+uv run scripts/vyos_restore.py --check
 
 # 復元コマンドを生成 (stdout)
-uv run secrets/scripts/vyos_restore.py
+uv run scripts/vyos_restore.py
 
 # ファイルに出力
-uv run secrets/scripts/vyos_restore.py -o restore-commands.txt
+uv run scripts/vyos_restore.py -o restore-commands.txt
 ```
 
-必要な環境変数 (`vyos-restore.env`に設定):
+必要な環境変数 (`scripts/vyos-restore.env`に設定):
 - `VYOS_SSH_PUBKEY` - SSH公開鍵 (ed25519)
 - `VYOS_WG_PRIVATE_KEY` - WireGuard サーバー秘密鍵
 - `VYOS_WG_MAC_PUBKEY` - WireGuard Mac公開鍵
 - `VYOS_WG_IPHONE_PUBKEY` - WireGuard iPhone公開鍵
-- `VYOS_CF_API_TOKEN` - Cloudflare APIトークン
+- `VYOS_CF_ACCOUNT_API_TOKEN` - Cloudflare Account APIトークン
 
 ---
 
