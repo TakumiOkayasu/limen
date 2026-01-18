@@ -1,0 +1,55 @@
+#!/bin/bash
+# Remove vyos-intel-ixgbe modules from updates/ directory
+# This ensures the in-tree ixgbe module (signed with custom kernel key) is used
+# instead of the out-of-tree vyos-intel-ixgbe module (signed with VyOS key)
+#
+# Background:
+# - modprobe prioritizes updates/ over kernel/
+# - vyos-intel-ixgbe installs to updates/
+# - Custom kernel modules are signed with a different key
+# - Result: signature mismatch, module fails to load
+
+set -euo pipefail
+
+echo "[HOOK] Removing vyos-intel-ixgbe modules from updates/..."
+
+# Find kernel version (there should be only one in the live image)
+KVER=$(ls /lib/modules/ 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+
+if [ -z "$KVER" ]; then
+    echo "[HOOK] WARNING: No kernel modules directory found, skipping"
+    exit 0
+fi
+
+UPDATES_DIR="/lib/modules/${KVER}/updates"
+
+# Remove ixgbe from updates/
+if [ -d "${UPDATES_DIR}/drivers/net/ethernet/intel/ixgbe" ]; then
+    echo "[HOOK] Removing ${UPDATES_DIR}/drivers/net/ethernet/intel/ixgbe"
+    rm -rf "${UPDATES_DIR}/drivers/net/ethernet/intel/ixgbe"
+fi
+
+# Remove ixgbevf from updates/
+if [ -d "${UPDATES_DIR}/drivers/net/ethernet/intel/ixgbevf" ]; then
+    echo "[HOOK] Removing ${UPDATES_DIR}/drivers/net/ethernet/intel/ixgbevf"
+    rm -rf "${UPDATES_DIR}/drivers/net/ethernet/intel/ixgbevf"
+fi
+
+# Rebuild module dependencies
+echo "[HOOK] Rebuilding module dependencies..."
+depmod -a "${KVER}"
+
+# Verify in-tree ixgbe is now the primary
+IXGBE_PATH=$(modinfo -n ixgbe 2>/dev/null || true)
+if [ -n "$IXGBE_PATH" ]; then
+    echo "[HOOK] SUCCESS: ixgbe module path: ${IXGBE_PATH}"
+    if echo "$IXGBE_PATH" | grep -q "/kernel/"; then
+        echo "[HOOK] SUCCESS: Using in-tree kernel module"
+    else
+        echo "[HOOK] WARNING: Not using in-tree module!"
+    fi
+else
+    echo "[HOOK] WARNING: ixgbe module not found"
+fi
+
+echo "[HOOK] Done"

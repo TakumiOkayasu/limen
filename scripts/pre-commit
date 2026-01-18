@@ -1,6 +1,7 @@
 #!/bin/bash
-# Pre-commit hook using Python pre-commit framework in Docker
+# Pre-commit hook using locally installed pre-commit
 # Install: ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+# Requires: uv tool install pre-commit
 
 set -euo pipefail
 
@@ -11,27 +12,15 @@ NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Check if Docker is available
-if ! command -v docker &> /dev/null; then
-    log_error "Docker is not installed or not running"
+# Check if pre-commit is available
+if ! command -v pre-commit &> /dev/null; then
+    log_error "pre-commit is not installed. Run: uv tool install pre-commit"
     exit 1
 fi
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
+log_info "Running pre-commit..."
 
-log_info "Running pre-commit in Docker..."
-
-if docker run --rm \
-    -v "${REPO_ROOT}:/workspace" \
-    -w /workspace \
-    python:3-slim \
-    sh -c '
-        apt-get update -qq && apt-get install -qq -y git > /dev/null 2>&1
-        pip install --quiet --root-user-action=ignore --upgrade pip
-        pip install --quiet --root-user-action=ignore pre-commit
-        git config --global --add safe.directory /workspace
-        pre-commit run --all-files
-    '; then
+if pre-commit run --all-files; then
     log_info "Pre-commit checks passed"
     exit 0
 else
