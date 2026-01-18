@@ -17,9 +17,9 @@ VyOS自作ルーター管理用のPiKVM初期セットアップ。
 ### 1-1: デフォルト認証情報
 
 | サービス | ユーザー | パスワード |
-|---------|---------|-----------|
-| SSH | root | root |
-| Web UI | admin | admin |
+| -------- | -------- | ---------- |
+| SSH      | root     | root       |
+| Web UI   | admin    | admin      |
 
 ### 1-2: IPアドレス確認
 
@@ -71,7 +71,8 @@ PiKVMはデフォルトで/がread-only。設定変更時は解除が必要:
 ```
 
 以下を変更:
-```
+
+```text
 PasswordAuthentication no
 ```
 
@@ -102,6 +103,7 @@ DHCPで問題なければスキップ可能。固定IPにする場合:
 ```
 
 以下のように編集:
+
 ```ini
 [Match]
 Name=eth0
@@ -124,7 +126,7 @@ DNS=192.168.1.1
 ### 4-1: HDMI接続確認
 
 1. PiKVMのHDMI入力をVyOSのHDMI出力に接続
-2. Web UI (https://pikvm.local) にアクセス
+2. Web UI (`https://pikvm.local`) にアクセス
 3. VyOSの画面が表示されることを確認
 
 ### 4-2: USB経由シリアルコンソール設定
@@ -148,7 +150,7 @@ PiKVM Web UIで「Terminal」→「/dev/ttyUSB0」を選択してアクセス確
 
 ### 5-1: Webインターフェース設定
 
-Web UI (https://pikvm.local) で以下を設定:
+Web UI (`https://pikvm.local`) で以下を設定:
 
 - **System** → **Fan**: ファン速度調整
 - **System** → **IPMI**: IPMI over LAN有効化 (オプション)
@@ -165,6 +167,7 @@ Web UI (https://pikvm.local) で以下を設定:
 ```
 
 手動更新:
+
 ```bash
 [PiKVM] rw
 [PiKVM] pacman -Syu
@@ -218,15 +221,89 @@ Web UI (https://pikvm.local) で以下を設定:
 ### シリアルコンソールが認識されない
 
 VyOS側のUSBデバイス確認:
+
 ```bash
 [VyOS] ls -l /dev/ttyUSB*
 [VyOS] dmesg | grep ttyUSB
 ```
 
 PiKVM側の確認:
+
 ```bash
 [PiKVM] ls -l /dev/ttyUSB*
 ```
+
+---
+
+## Appendix A: Bluetoothキーボード/マウス設定
+
+Pi Zero WでPiKVM本体をローカル操作する場合、USB OTGポートはVyOSへのHID用に使用されるため、Bluetooth接続が現実的。
+
+### A-1: 対応モデル
+
+| モデル         | Bluetooth | 備考             |
+| -------------- | --------- | ---------------- |
+| Pi Zero W      | 内蔵 ✅    | BCM43438         |
+| Pi Zero 2 W    | 内蔵 ✅    | BCM43436         |
+| Pi 3/4/5       | 内蔵 ✅    |                  |
+| Pi Zero (無印) | ❌         | USBアダプタ必要 |
+
+### A-2: パッケージインストール
+
+```bash
+[PiKVM] rw
+[PiKVM] pacman -Sy bluez bluez-utils
+[PiKVM] systemctl enable --now bluetooth
+```
+
+### A-3: デバイスペアリング
+
+```bash
+[PiKVM] bluetoothctl
+```
+
+bluetoothctl内で以下を実行:
+
+```text
+power on
+agent on
+default-agent
+scan on
+```
+
+キーボード/マウスをペアリングモードにし、MACアドレスが表示されたら:
+
+```text
+pair XX:XX:XX:XX:XX:XX
+trust XX:XX:XX:XX:XX:XX
+connect XX:XX:XX:XX:XX:XX
+```
+
+複数デバイスの場合は `pair`/`trust`/`connect` を各デバイスで繰り返す。完了後:
+
+```text
+exit
+```
+
+### A-4: 自動接続設定
+
+```bash
+[PiKVM] sed -i 's/#AutoEnable=false/AutoEnable=true/' /etc/bluetooth/main.conf
+[PiKVM] ro
+```
+
+### A-5: 確認
+
+```bash
+[PiKVM] bluetoothctl devices
+[PiKVM] bluetoothctl info XX:XX:XX:XX:XX:XX
+```
+
+| 状態      | 期待値 |
+| --------- | ------ |
+| Connected | yes    |
+| Trusted   | yes    |
+| Paired    | yes    |
 
 ---
 
