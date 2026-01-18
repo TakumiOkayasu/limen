@@ -1,0 +1,155 @@
+# VyOS Configuration Template
+# Placeholders will be replaced by vyos_restore.py
+# Lines starting with "# set" contain placeholders and will be uncommented after replacement
+
+# ============================================================
+# Basic Settings
+# ============================================================
+set system host-name vyos
+set system time-zone Asia/Tokyo
+set system ntp server ntp.nict.jp
+set system ntp server ntp.jst.mfeed.ad.jp
+
+# ============================================================
+# SSH Configuration (LAN only)
+# ============================================================
+set service ssh port 22
+set service ssh listen-address 192.168.1.1
+# set system login user vyos authentication public-keys admin type ssh-ed25519
+# set system login user vyos authentication public-keys admin key '<公開鍵>'
+
+# ============================================================
+# Interface: eth0 (WXR Connection - 1GbE)
+# ============================================================
+set interfaces ethernet eth0 address 192.168.100.2/24
+set interfaces ethernet eth0 description 'WXR-upstream'
+
+# ============================================================
+# Interface: eth1 (WAN - 10GbE)
+# ============================================================
+set interfaces ethernet eth1 description 'WAN'
+set interfaces ethernet eth1 ipv6 address autoconf
+set interfaces ethernet eth1 dhcpv6-options pd 0 interface eth2 address 1
+set interfaces ethernet eth1 dhcpv6-options pd 0 interface eth2 sla-id 0
+set interfaces ethernet eth1 dhcpv6-options pd 0 length 56
+set interfaces ethernet eth1 dhcpv6-options duid '00:03:00:01:XX:XX:XX:XX:XX:XX'
+
+# ============================================================
+# Interface: eth2 (LAN - 10GbE)
+# ============================================================
+set interfaces ethernet eth2 address 192.168.1.1/24
+set interfaces ethernet eth2 description 'LAN'
+
+# ============================================================
+# IPv6 Router Advertisement (eth2)
+# ============================================================
+set service router-advert interface eth2 prefix ::/64
+set service router-advert interface eth2 name-server 2606:4700:4700::1111
+set service router-advert interface eth2 name-server 2001:4860:4860::8888
+
+# ============================================================
+# WireGuard VPN (wg0)
+# ============================================================
+set interfaces wireguard wg0 address 10.10.10.1/24
+set interfaces wireguard wg0 address fd00:10:10:10::1/64
+set interfaces wireguard wg0 port 51820
+set interfaces wireguard wg0 description 'WireGuard VPN'
+# set interfaces wireguard wg0 private-key '<VyOS秘密鍵>'
+# set interfaces wireguard wg0 peer mac allowed-ips 10.10.10.2/32
+# set interfaces wireguard wg0 peer mac allowed-ips fd00:10:10:10::2/128
+# set interfaces wireguard wg0 peer mac public-key '<Mac公開鍵>'
+# set interfaces wireguard wg0 peer iphone allowed-ips 10.10.10.3/32
+# set interfaces wireguard wg0 peer iphone allowed-ips fd00:10:10:10::3/128
+# set interfaces wireguard wg0 peer iphone public-key '<iPhone公開鍵>'
+
+# ============================================================
+# Firewall: Input Filter
+# ============================================================
+set firewall ipv4 input filter default-action drop
+set firewall ipv4 input filter default-log
+set firewall ipv4 input filter rule 10 action accept
+set firewall ipv4 input filter rule 10 state established
+set firewall ipv4 input filter rule 10 state related
+set firewall ipv4 input filter rule 20 action accept
+set firewall ipv4 input filter rule 20 protocol icmp
+set firewall ipv4 input filter rule 30 action accept
+set firewall ipv4 input filter rule 30 source address 192.168.1.0/24
+set firewall ipv4 input filter rule 40 action drop
+set firewall ipv4 input filter rule 40 protocol udp
+set firewall ipv4 input filter rule 40 destination port 51820
+set firewall ipv4 input filter rule 40 recent count 10
+set firewall ipv4 input filter rule 40 recent time minute
+set firewall ipv4 input filter rule 50 action accept
+set firewall ipv4 input filter rule 50 protocol udp
+set firewall ipv4 input filter rule 50 destination port 51820
+set firewall ipv6 input filter default-action drop
+set firewall ipv6 input filter default-log
+set firewall ipv6 input filter rule 10 action accept
+set firewall ipv6 input filter rule 10 state established
+set firewall ipv6 input filter rule 10 state related
+set firewall ipv6 input filter rule 20 action accept
+set firewall ipv6 input filter rule 20 protocol icmpv6
+set firewall ipv6 input filter rule 25 action accept
+set firewall ipv6 input filter rule 25 protocol udp
+set firewall ipv6 input filter rule 25 source port 547
+set firewall ipv6 input filter rule 25 destination port 546
+set firewall ipv6 input filter rule 30 action accept
+set firewall ipv6 input filter rule 30 source address fe80::/10
+set firewall ipv6 input filter rule 40 action drop
+set firewall ipv6 input filter rule 40 protocol udp
+set firewall ipv6 input filter rule 40 destination port 51820
+set firewall ipv6 input filter rule 40 recent count 10
+set firewall ipv6 input filter rule 40 recent time minute
+set firewall ipv6 input filter rule 50 action accept
+set firewall ipv6 input filter rule 50 protocol udp
+set firewall ipv6 input filter rule 50 destination port 51820
+
+# ============================================================
+# Firewall: Forward Filter
+# ============================================================
+set firewall ipv4 forward filter default-action drop
+set firewall ipv4 forward filter default-log
+set firewall ipv4 forward filter rule 10 action accept
+set firewall ipv4 forward filter rule 10 state established
+set firewall ipv4 forward filter rule 10 state related
+set firewall ipv4 forward filter rule 20 action accept
+set firewall ipv4 forward filter rule 20 inbound-interface name eth2
+set firewall ipv4 forward filter rule 90 action drop
+set firewall ipv4 forward filter rule 90 inbound-interface name wg0
+set firewall ipv4 forward filter rule 90 outbound-interface name eth2
+set firewall ipv4 forward filter rule 91 action drop
+set firewall ipv4 forward filter rule 91 inbound-interface name wg0
+set firewall ipv4 forward filter rule 91 outbound-interface name eth0
+set firewall ipv6 forward filter default-action drop
+set firewall ipv6 forward filter default-log
+set firewall ipv6 forward filter rule 10 action accept
+set firewall ipv6 forward filter rule 10 state established
+set firewall ipv6 forward filter rule 10 state related
+set firewall ipv6 forward filter rule 20 action accept
+set firewall ipv6 forward filter rule 20 inbound-interface name eth2
+set firewall ipv6 forward filter rule 90 action drop
+set firewall ipv6 forward filter rule 90 inbound-interface name wg0
+set firewall ipv6 forward filter rule 90 outbound-interface name eth2
+
+# ============================================================
+# NAT: Source NAT for IPv4
+# ============================================================
+set nat source rule 100 outbound-interface name eth0
+set nat source rule 100 source address 192.168.1.0/24
+set nat source rule 100 translation address masquerade
+
+# ============================================================
+# Routing: Default Route via WXR
+# ============================================================
+set protocols static route 0.0.0.0/0 next-hop 192.168.100.1
+
+# ============================================================
+# Dynamic DNS (Cloudflare)
+# ============================================================
+set service dns dynamic name cloudflare address interface eth1
+set service dns dynamic name cloudflare protocol cloudflare
+set service dns dynamic name cloudflare host-name router.murata-lab.net
+set service dns dynamic name cloudflare zone murata-lab.net
+set service dns dynamic name cloudflare username token
+# set service dns dynamic name cloudflare password '<Cloudflare APIトークン>'
+set service dns dynamic name cloudflare ip-version ipv6
