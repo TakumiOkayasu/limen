@@ -32,6 +32,14 @@ realtek-r8126-dkms/
 vyos-build/
 docs/pikvm/*.img.xz
 
+# PiKVMバックアップ（機密情報を含む可能性）
+pikvm/config/backup/
+*.img.gz
+
+# PiKVMスクリプトは許可（グローバルignoreのBackup*パターンを上書き）
+!pikvm/scripts/
+!pikvm/scripts/*.sh
+
 # Python
 .venv/
 __pycache__/
