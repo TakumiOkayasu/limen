@@ -46,9 +46,13 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
                      │                │
                      └─ 10G ── [WXR9300BE6P]
                                (MAP-E専用)
+
+                     [PiKVM] ──USB/HDMI── [自作ルーター]
+                             (管理コンソール)
 ```
 
 - **LXW-10G5**: BUFFALO 10GbE L2スイッチ (5ポート)
+- **PiKVM**: Raspberry Pi KVM-over-IP (VyOS管理用)
 
 ### NIC構成
 
@@ -74,6 +78,7 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 |------|------|
 | 自作ルーター | IPv6ルーター, RA/DHCPv6-PD取得, FW, ポリシールーティング, LANのデフォルトGW |
 | WXR9300BE6P | MAP-E CE専用, IPv4 NAT, (必要なら)無線AP |
+| PiKVM | VyOS管理コンソール, リモートKVM, シリアルコンソール |
 
 ### トラフィックフロー
 
@@ -89,11 +94,13 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 - **[Mac]** - Macのターミナルで実行
 - **[VyOS]** - VyOSのコンソール/SSHで実行
 - **[WXR]** - WXR管理画面で操作
+- **[PiKVM]** - PiKVMのSSHで実行
 
 例:
 ```
 [VyOS] show interfaces
 [Mac] ping 192.168.1.1
+[PiKVM] systemctl status kvmd
 ```
 
 ---
