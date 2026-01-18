@@ -180,9 +180,12 @@ jobs:
           echo "Build Type: ${BUILD_TYPE}"
           echo "=========================="
 
-          # Copy build script to vyos-build directory
+          # Copy build scripts to vyos-build directory
           cp "${{ github.workspace }}/scripts/ci/build-kernel-and-modules.sh" ./build-script.sh
-          chmod +x ./build-script.sh
+          cp "${{ github.workspace }}/scripts/ci/embed-initial-config.sh" ./build-script-embed-config.sh
+          cp "${{ github.workspace }}/scripts/ci/initial-config.boot" ./initial-config.boot
+          cp "${{ github.workspace }}/scripts/ci/driver-check.sh" ./driver-check.sh
+          chmod +x ./build-script.sh ./build-script-embed-config.sh ./driver-check.sh
 
           # Run build in Docker container
           docker run --rm --privileged \

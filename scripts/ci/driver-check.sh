@@ -201,6 +201,64 @@ check_kernel_version() {
     fi
 }
 
+check_module_signatures() {
+    log_info "Checking module signature enforcement..."
+
+    if grep -q "CONFIG_MODULE_SIG_FORCE=y" /boot/config-"$(uname -r)" 2>/dev/null; then
+        log_ok "MODULE_SIG_FORCE is enabled (signature required)"
+    else
+        log_warn "MODULE_SIG_FORCE is NOT enabled"
+    fi
+
+    if grep -q "CONFIG_MODULE_SIG=y" /boot/config-"$(uname -r)" 2>/dev/null; then
+        log_ok "MODULE_SIG is enabled"
+    else
+        log_warn "MODULE_SIG is NOT enabled"
+    fi
+}
+
+check_ssh_status() {
+    log_info "Checking SSH service..."
+
+    if systemctl is-active ssh >/dev/null 2>&1 || systemctl is-active sshd >/dev/null 2>&1; then
+        log_ok "SSH service is running"
+
+        # Show listen addresses
+        local ssh_ports
+        ssh_ports=$(ss -tlnp 2>/dev/null | grep -E ':22\s' | awk '{print $4}' || true)
+        if [ -n "$ssh_ports" ]; then
+            log_ok "SSH listening on: $(echo "$ssh_ports" | tr '\n' ' ')"
+        fi
+    else
+        log_warn "SSH service is NOT running"
+    fi
+}
+
+check_network_config() {
+    log_info "Checking network configuration..."
+
+    # Check eth0 specifically
+    if ip addr show eth0 >/dev/null 2>&1; then
+        local eth0_addr
+        eth0_addr=$(ip -4 addr show eth0 | grep inet | awk '{print $2}' | head -1 || true)
+        if [ -n "$eth0_addr" ]; then
+            log_ok "eth0 IP address: $eth0_addr"
+        else
+            log_warn "eth0 has no IPv4 address"
+        fi
+
+        local eth0_state
+        eth0_state=$(ip -br link show eth0 | awk '{print $2}' || true)
+        if [ "$eth0_state" = "UP" ]; then
+            log_ok "eth0 is UP"
+        else
+            log_warn "eth0 is DOWN"
+        fi
+    else
+        log_error "eth0 interface not found"
+    fi
+}
+
 show_network_summary() {
     if [ "$QUIET" != "--quiet" ]; then
         echo ""
@@ -219,6 +277,15 @@ main() {
     print_header
 
     check_kernel_version
+    echo ""
+
+    check_module_signatures
+    echo ""
+
+    check_network_config
+    echo ""
+
+    check_ssh_status
     echo ""
 
     check_ixgbe || true

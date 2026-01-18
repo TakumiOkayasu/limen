@@ -478,6 +478,14 @@ EOF
     sudo chmod 644 /vyos/data/live-build-config/includes.chroot/etc/apt/preferences.d/99-block-vyos-intel-drivers
     log_info "APT preferences configured to block: vyos-intel-ixgbe, vyos-intel-ixgbevf"
 
+    # Embed initial configuration and driver-check script
+    log_info "Embedding initial configuration and driver-check..."
+    if [ -f /vyos/build-script-embed-config.sh ]; then
+        sudo /vyos/build-script-embed-config.sh
+    else
+        log_warn "embed-initial-config.sh not found, skipping initial config embedding"
+    fi
+
     # Build ISO
     log_info "Building VyOS ISO with custom kernel..."
     sudo ./build-vyos-image \
