@@ -27,6 +27,7 @@ GitHub ActionsでVyOS ISOをビルドする際、以下を自動的に埋め込�
 | `scripts/ci/embed-initial-config.sh` | ISO埋め込みスクリプト |
 | `scripts/ci/driver-check.sh` | ドライバー検証ツール |
 | `scripts/ci/build-kernel-and-modules.sh` | カーネル+ISO統合ビルド |
+| `scripts/ci/hooks/live/9999-remove-vyos-intel-ixgbe.chroot` | vyos-intel-ixgbe削除hook |
 
 ---
 
@@ -133,13 +134,22 @@ ISO起動後、`driver-check` コマンドで以下を確認:
    - `embed-initial-config.sh`
    - `initial-config.boot`
    - `driver-check.sh`
+   - `hooks/live/*.chroot`
 3. **Dockerコンテナ内実行**:
-   - カーネルビルド
+   - カーネルビルド (CONFIG_IXGBE=m 有効化)
    - r8126モジュールビルド
    - **初期設定埋め込み** (`embed-initial-config.sh`)
+   - **live-build hooks配置** (vyos-intel-ixgbe削除用)
    - ISOビルド
 4. **成果物**:
    - `vyos-custom-*.iso` (初期設定+driver-check埋め込み済み)
+
+### live-build hooks
+
+VyOS公式の`vyos-intel-ixgbe`パッケージはout-of-treeドライバーで、`/lib/modules/*/updates/`に配置される。
+Linuxのmodprobeは`updates/`を`kernel/`より優先するため、カスタムカーネルの署名付きixgbeモジュールが使われない問題がある。
+
+`9999-remove-vyos-intel-ixgbe.chroot` hookはsquashfs生成前に実行され、`updates/`からvyos-intel-ixgbeのモジュールを削除する。これにより、カスタムカーネルのin-tree ixgbeモジュール（カスタム署名キーで署名済み）が使用される。
 
 ---
 
@@ -188,6 +198,23 @@ config.boot.defaultが適用されているか確認。
 ```
 
 CONFIG_MODULE_SIG_FORCEが有効な場合、正しい署名キーでビルドされたモジュールのみロード可能。
+
+### ixgbeがupdates/から読み込まれる
+
+vyos-intel-ixgbeパッケージが`updates/`に配置されている場合:
+
+```bash
+[VyOS] modinfo -n ixgbe
+# /lib/modules/.../updates/... と表示される場合はNG
+# /lib/modules/.../kernel/... と表示されるべき
+```
+
+live-build hookが正しく動作していない可能性。ISOビルドログでhookの実行を確認:
+
+```
+[HOOK] Removing vyos-intel-ixgbe modules from updates/...
+[HOOK] SUCCESS: Using in-tree kernel module
+```
 
 ---
 

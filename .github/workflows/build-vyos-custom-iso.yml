@@ -187,6 +187,11 @@ jobs:
           cp "${{ github.workspace }}/scripts/ci/driver-check.sh" ./driver-check.sh
           chmod +x ./build-script.sh ./build-script-embed-config.sh ./driver-check.sh
 
+          # Copy live-build hooks
+          mkdir -p ./hooks/live
+          cp "${{ github.workspace }}/scripts/ci/hooks/live/"*.chroot ./hooks/live/ 2>/dev/null || true
+          chmod +x ./hooks/live/*.chroot 2>/dev/null || true
+
           # Run build in Docker container
           docker run --rm --privileged \
             -v "$(pwd):/vyos" \

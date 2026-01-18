@@ -478,6 +478,20 @@ EOF
     sudo chmod 644 /vyos/data/live-build-config/includes.chroot/etc/apt/preferences.d/99-block-vyos-intel-drivers
     log_info "APT preferences configured to block: vyos-intel-ixgbe, vyos-intel-ixgbevf"
 
+    # Install live-build hooks to remove vyos-intel-ixgbe modules from updates/
+    # APT preferences only affects future installs, not packages already installed during build
+    # The hook runs before squashfs generation and removes the conflicting modules
+    log_info "Installing live-build hooks..."
+    if [ -f /vyos/hooks/live/9999-remove-vyos-intel-ixgbe.chroot ]; then
+        sudo mkdir -p /vyos/data/live-build-config/hooks/live
+        sudo cp /vyos/hooks/live/9999-remove-vyos-intel-ixgbe.chroot \
+            /vyos/data/live-build-config/hooks/live/
+        sudo chmod 755 /vyos/data/live-build-config/hooks/live/9999-remove-vyos-intel-ixgbe.chroot
+        log_info "Installed hook: 9999-remove-vyos-intel-ixgbe.chroot"
+    else
+        log_info "Hook file not found, skipping (vyos-intel-ixgbe may override custom ixgbe)"
+    fi
+
     # Embed initial configuration and driver-check script
     log_info "Embedding initial configuration and driver-check..."
     if [ -f /vyos/build-script-embed-config.sh ]; then
