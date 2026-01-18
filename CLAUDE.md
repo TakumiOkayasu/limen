@@ -31,21 +31,21 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 ### 設計思想
 
-- **IPv6を主役**: 10Gbps活用可能、WXRを一切通さない
-- **IPv4は例外扱い**: ポリシールーティングでWXRへ転送
-- **MAP-Eは保険**: 捨てず、重要視もしない
+- **IPv6を主役**: 10Gbps活用可能
+- **IPv4はMAP-E直接**: VyOSでMAP-Eトンネル処理 (WXR不要)
+- **WXRは無線AP専用**: MAP-E処理は行わない
 
 ### 物理構成
 
 ```
 [ONU] ── [LXW-10G5] ─┬─ 10G ── [自作ルーター] ── [LAN]
                      │           (eth1)         (eth2)
-                     │                │
-                     │           (別セグメント 1G)
-                     │              (eth0)
-                     │                │
+                     │              ↓
+                     │         MAP-Eトンネル
+                     │         (IPv4 over IPv6)
+                     │
                      └─ 10G ── [WXR9300BE6P]
-                               (MAP-E専用)
+                               (無線AP専用)
 
                      [PiKVM] ──USB/HDMI── [自作ルーター]
                              (管理コンソール)
@@ -53,37 +53,29 @@ BIGLOBE光(10Gbps)環境で、MAP-Eの制約を回避しつつ10Gbpsを最大限
 
 - **LXW-10G5**: BUFFALO 10GbE L2スイッチ (5ポート)
 - **PiKVM**: Raspberry Pi KVM-over-IP (VyOS管理用)
+- **WXR9300BE6P**: APモードで無線LAN提供 (MAP-E処理なし)
 
 ### NIC構成
 
 | VyOS名 | NIC | 速度 | 用途 |
 |--------|-----|------|------|
-| eth0 | オンボード | 1GbE | WXR WAN側接続 (MAP-E upstream) |
-| eth1 | Intel X540-T2 Port2 | 10GbE | WAN (LXW-10G5経由でONU) |
+| eth0 | オンボード | 1GbE | (未使用) |
+| eth1 | Intel X540-T2 Port2 | 10GbE | WAN (LXW-10G5経由でONU) + MAP-Eトンネル |
 | eth2 | Intel X540-T2 Port1 | 10GbE | LAN (主要機器向け) |
-| (未使用) | RTL8126 | 5GbE | **将来eth0の代替予定** (WXR接続を5Gbpsに高速化) |
-
-### WXR接続用別セグメント (192.168.100.x)
-
-自作ルーターとWXR9300BE6Pを1GbEオンボードNICで直結し、IPv4転送専用の別セグメントを構築する。
-
-- 自作ルーター側: 192.168.100.2/24
-- WXR側 (LAN): 192.168.100.1/24 (DHCPサーバー無効)
-- 用途: IPv4トラフィックをWXR経由でMAP-Eに転送
-- 帯域: 1Gbps上限 (IPv4は例外扱いなので問題なし)
+| (未使用) | RTL8126 | 5GbE | 将来拡張用 |
 
 ### 役割分担
 
 | 装置 | 役割 |
 |------|------|
-| 自作ルーター | IPv6ルーター, RA/DHCPv6-PD取得, FW, ポリシールーティング, LANのデフォルトGW |
-| WXR9300BE6P | MAP-E CE専用, IPv4 NAT, (必要なら)無線AP |
+| 自作ルーター | IPv6ルーター, RA/DHCPv6-PD取得, **MAP-E CE**, FW, LANのデフォルトGW |
+| WXR9300BE6P | 無線AP専用 (APモード) |
 | PiKVM | VyOS管理コンソール, リモートKVM, シリアルコンソール |
 
 ### トラフィックフロー
 
-- **IPv6**: LAN → 自作ルーター → LXW-10G5 → ONU → NGN (10Gbps狙い)
-- **IPv4**: LAN → 自作ルーター → WXR → MAP-Eトンネル (1Gbps上限)
+- **IPv6**: LAN → 自作ルーター → eth1 → ONU → NGN (10Gbps)
+- **IPv4**: LAN → 自作ルーター → MAP-Eトンネル (eth1) → BR → インターネット
 
 ---
 
@@ -233,9 +225,9 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 - [x] 2-1: RA受信・DHCPv6-PD取得 (2404:7a82:4d02:4100::/56)
   - DUID-LL形式必須: `00:03:00:01:MAC`
   - 詳細は [troubleshooting-dhcpv6-pd.md](secrets/docs/troubleshooting-dhcpv6-pd.md)
-- [x] 2-2: LAN側RA配布設定 (2026-01-06完了)
-  - eth2で ::/64 配布
-  - DNS: Cloudflare + Google
+- [x] 2-2: LAN側RA配布設定 (2026-01-06完了、2026-01-19修正)
+  - eth2で 4101::/64 配布 (WANが4100を使用するため別サブネット)
+  - DNS: Cloudflare + Google (RDNSS)
 - [x] 2-3: IPv6ファイアウォール設定 (2026-01-06完了)
   - input/forward filter設定済み
   - ICMPv6, DHCPv6許可
@@ -304,7 +296,8 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 
 ## トラブルシューティング
 
-- [IPv6疎通問題](secrets/docs/troubleshooting-ipv6.md) - チェックリスト、過去の失敗パターン、VyOS制約
+- **[MAP-E接続問題](docs/troubleshooting-mape.md)** - IPv4疎通不可、プレフィックス変更時の対応
+- **[IPv6疎通問題](docs/troubleshooting-ipv6.md)** - WAN/LANプレフィックス重複、RA設定、DNS配布
 - [DHCPv6-PD取得問題](secrets/docs/troubleshooting-dhcpv6-pd.md) - DUID-LL形式が必須
 - [RA設定消失](secrets/docs/troubleshooting-ra-missing.md) - クライアントがIPv6取得できない場合の診断手順
 - [カーネル更新失敗](secrets/docs/failure-log-2026-01-07-kernel-update.md) - MODULE_SIG_FORCE問題
@@ -320,6 +313,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 | `scripts/vyos_restore.py` | 復元コマンド生成スクリプト (Python) |
 | `scripts/vyos-restore.env` | シークレット値 (.gitignore対象) |
 | `scripts/vyos-config-template.txt` | 設定コマンドテンプレート (参照用) |
+| `scripts/setup-mape.sh` | MAP-Eトンネル設定スクリプト |
 
 ### 復元スクリプトの使い方
 
