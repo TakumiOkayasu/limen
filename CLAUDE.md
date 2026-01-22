@@ -296,8 +296,7 @@ gh run view <成功したrun_id> --log | grep <検索キーワード>
 
 ## トラブルシューティング
 
-- **[MAP-E接続問題](docs/troubleshooting-mape.md)** - IPv4疎通不可、プレフィックス変更時の対応
-- **[IPv6疎通問題](docs/troubleshooting-ipv6.md)** - WAN/LANプレフィックス重複、RA設定、DNS配布
+- **[トラブルシューティング総合ガイド](docs/troubleshooting.md)** - IPv6、MAP-E、ネットワークセグメント問題
 - [DHCPv6-PD取得問題](secrets/docs/troubleshooting-dhcpv6-pd.md) - DUID-LL形式が必須
 - [RA設定消失](secrets/docs/troubleshooting-ra-missing.md) - クライアントがIPv6取得できない場合の診断手順
 - [カーネル更新失敗](secrets/docs/failure-log-2026-01-07-kernel-update.md) - MODULE_SIG_FORCE問題
