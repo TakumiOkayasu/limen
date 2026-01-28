@@ -8,6 +8,7 @@ VyOSルーター環境のトラブルシューティング総合ガイド。
 
 1. [IPv6接続問題](#1-ipv6接続問題)
 2. [MAP-E (IPv4) 接続問題](#2-map-e-ipv4-接続問題)
+   - [2.5 HTTPS/TLSが特定サイトでタイムアウト](#25-httpstlsが特定サイトでタイムアウト)
 3. [ネットワークセグメント・DHCP問題](#3-ネットワークセグメントdhcp問題)
 
 ---
@@ -159,6 +160,47 @@ MAP-EのNATルールで全ポートブロックを使用しているか確認:
    ```
 
 2. **BRアドレスの非対称性**: `remote any` でトンネル再作成
+
+---
+
+### 2.5 HTTPS/TLSが特定サイトでタイムアウト
+
+**症状**: HTTPS接続が特定サイト（例: github.com）でタイムアウトするが、SSH（port 22）は正常
+
+**原因**: **MSS Clamp policy routeがLAN側インターフェースに未適用**
+
+MAP-Eトンネルのカプセル化によりMTUが小さくなるが、LAN側でMSS調整が行われないとTLSハンドシェイクの大きなパケットがトンネルMTUを超過する。ICMPがブロックされている環境ではPMTUDも機能せず、タイムアウトとなる。
+
+#### 確認手順
+
+```bash
+# MSS-CLAMP policy routeの適用状況を確認
+[VyOS] show configuration commands | grep MSS-CLAMP
+
+# eth2 (LAN) に適用されているか？
+# 以下が出力に含まれていなければ未適用
+# set policy route MSS-CLAMP interface eth2
+```
+
+#### 解決方法
+
+**恒久対応**:
+
+```bash
+[VyOS] configure
+[VyOS] set policy route MSS-CLAMP interface eth2
+[VyOS] commit
+[VyOS] save
+```
+
+**検証**:
+
+```bash
+[Mac] curl -I https://github.com
+# 200 OK が返れば正常
+```
+
+詳細な診断記録: [GitHub接続遅延 調査レポート](github-connection-diagnosis.md)
 
 ---
 
