@@ -237,7 +237,7 @@ class TestReplacePlaceholders:
         result, warnings = replace_placeholders(commands, env_vars)
 
         assert len(warnings) == 1
-        assert "VYOS_CF_API_TOKEN" in warnings[0]
+        assert "VYOS_CF_ACCOUNT_API_TOKEN" in warnings[0]
 
     def test_regular_commands_pass_through(self) -> None:
         """Test that regular commands without placeholders pass through."""

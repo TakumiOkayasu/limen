@@ -6,6 +6,7 @@ secrets/
 credentials/
 scripts/vyos-restore.env
 scripts/vyos-restore.vbash
+scripts/setup-mape.env
 
 # VyOS設定バックアップ（機密情報を含む可能性）
 *.boot
