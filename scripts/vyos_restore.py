@@ -21,6 +21,8 @@ Required environment variables (or .env file):
     VYOS_WG_MAC_PUBKEY         - WireGuard Mac client public key
     VYOS_WG_IPHONE_PUBKEY      - WireGuard iPhone client public key
     VYOS_CF_ACCOUNT_API_TOKEN  - Cloudflare Account API token for DDNS (NOT user token)
+    VYOS_DHCPV6_DUID           - DHCPv6 DUID (format: 00:03:00:01:MAC)
+    VYOS_MAPE_IPV4             - MAP-E shared IPv4 address
 """
 
 from __future__ import annotations
@@ -68,6 +70,16 @@ SECRET_MAPPINGS = [
         pattern=r"<Cloudflare APIトークン>",
         env_var="VYOS_CF_ACCOUNT_API_TOKEN",
         description="Cloudflare Account API token for DDNS (NOT user token)",
+    ),
+    SecretMapping(
+        pattern=r"<DUID>",
+        env_var="VYOS_DHCPV6_DUID",
+        description="DHCPv6 DUID (format: 00:03:00:01:MAC)",
+    ),
+    SecretMapping(
+        pattern=r"<MAP-E IPv4>",
+        env_var="VYOS_MAPE_IPV4",
+        description="MAP-E shared IPv4 address",
     ),
 ]
 

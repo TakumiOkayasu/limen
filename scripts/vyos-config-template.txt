@@ -7,8 +7,28 @@
 # ============================================================
 set system host-name vyos
 set system time-zone Asia/Tokyo
-set system ntp server ntp.nict.jp
-set system ntp server ntp.jst.mfeed.ad.jp
+set system config-management commit-revisions '100'
+set system console device ttyS0 speed '115200'
+set system syslog local facility all level 'info'
+set system syslog local facility local7 level 'debug'
+set system name-server '2606:4700:4700::1111'
+set system name-server '2606:4700:4700::1001'
+set system name-server '2001:4860:4860::8888'
+
+# ============================================================
+# NTP
+# ============================================================
+set service ntp server ntp.nict.jp
+set service ntp server ntp.jst.mfeed.ad.jp
+set service ntp server time.cloudflare.com
+set service ntp server time.google.com
+set service ntp server time.windows.com
+set service ntp allow-client address '10.0.0.0/8'
+set service ntp allow-client address '172.16.0.0/12'
+set service ntp allow-client address '192.168.0.0/16'
+set service ntp allow-client address '::1/128'
+set service ntp allow-client address 'fe80::/10'
+set service ntp allow-client address 'fc00::/7'
 
 # ============================================================
 # SSH Configuration (LAN only)
@@ -30,22 +50,35 @@ set interfaces ethernet eth0 description 'WXR-upstream'
 set interfaces ethernet eth1 description 'WAN'
 set interfaces ethernet eth1 ipv6 address autoconf
 set interfaces ethernet eth1 dhcpv6-options pd 0 interface eth2 address 1
-set interfaces ethernet eth1 dhcpv6-options pd 0 interface eth2 sla-id 0
+set interfaces ethernet eth1 dhcpv6-options pd 0 interface eth2 sla-id '1'
 set interfaces ethernet eth1 dhcpv6-options pd 0 length 56
-set interfaces ethernet eth1 dhcpv6-options duid '00:03:00:01:XX:XX:XX:XX:XX:XX'
+# set interfaces ethernet eth1 dhcpv6-options duid '<DUID>'
 
 # ============================================================
 # Interface: eth2 (LAN - 10GbE)
 # ============================================================
 set interfaces ethernet eth2 address 192.168.1.1/24
+set interfaces ethernet eth2 address '2404:7a82:4d02:4101::1/64'
 set interfaces ethernet eth2 description 'LAN'
 
 # ============================================================
 # IPv6 Router Advertisement (eth2)
 # ============================================================
-set service router-advert interface eth2 prefix ::/64
-set service router-advert interface eth2 name-server 2606:4700:4700::1111
-set service router-advert interface eth2 name-server 2001:4860:4860::8888
+set service router-advert interface eth2 prefix 2404:7a82:4d02:4101::/64
+set service router-advert interface eth2 name-server '2606:4700:4700::1111'
+set service router-advert interface eth2 name-server '2001:4860:4860::8888'
+set service router-advert interface eth2 name-server '2606:4700:4700::1001'
+set service router-advert interface eth2 link-mtu '1500'
+
+# ============================================================
+# DHCPv4 Server (LAN)
+# ============================================================
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 option default-router '192.168.1.1'
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 option name-server '192.168.1.1'
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 option name-server '8.8.8.1'
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range 0 start '192.168.1.100'
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 range 0 stop '192.168.1.199'
+set service dhcp-server shared-network-name LAN subnet 192.168.1.0/24 subnet-id '1'
 
 # ============================================================
 # WireGuard VPN (wg0)
@@ -63,7 +96,7 @@ set interfaces wireguard wg0 description 'WireGuard VPN'
 # set interfaces wireguard wg0 peer iphone public-key '<iPhone公開鍵>'
 
 # ============================================================
-# Firewall: Input Filter
+# Firewall: IPv4 Input Filter
 # ============================================================
 set firewall ipv4 input filter default-action drop
 set firewall ipv4 input filter default-log
@@ -74,6 +107,9 @@ set firewall ipv4 input filter rule 20 action accept
 set firewall ipv4 input filter rule 20 protocol icmp
 set firewall ipv4 input filter rule 30 action accept
 set firewall ipv4 input filter rule 30 source address 192.168.1.0/24
+set firewall ipv4 input filter rule 35 action accept
+set firewall ipv4 input filter rule 35 description 'VPN→VyOS: All allowed'
+set firewall ipv4 input filter rule 35 source address 10.10.10.0/24
 set firewall ipv4 input filter rule 40 action drop
 set firewall ipv4 input filter rule 40 protocol udp
 set firewall ipv4 input filter rule 40 destination port 51820
@@ -82,6 +118,10 @@ set firewall ipv4 input filter rule 40 recent time minute
 set firewall ipv4 input filter rule 50 action accept
 set firewall ipv4 input filter rule 50 protocol udp
 set firewall ipv4 input filter rule 50 destination port 51820
+
+# ============================================================
+# Firewall: IPv6 Input Filter
+# ============================================================
 set firewall ipv6 input filter default-action drop
 set firewall ipv6 input filter default-log
 set firewall ipv6 input filter rule 10 action accept
@@ -95,6 +135,9 @@ set firewall ipv6 input filter rule 25 source port 547
 set firewall ipv6 input filter rule 25 destination port 546
 set firewall ipv6 input filter rule 30 action accept
 set firewall ipv6 input filter rule 30 source address fe80::/10
+set firewall ipv6 input filter rule 35 action accept
+set firewall ipv6 input filter rule 35 description 'VPN→VyOS: All allowed'
+set firewall ipv6 input filter rule 35 source address fd00:10:10:10::/64
 set firewall ipv6 input filter rule 40 action drop
 set firewall ipv6 input filter rule 40 protocol udp
 set firewall ipv6 input filter rule 40 destination port 51820
@@ -105,31 +148,45 @@ set firewall ipv6 input filter rule 50 protocol udp
 set firewall ipv6 input filter rule 50 destination port 51820
 
 # ============================================================
-# Firewall: Forward Filter
+# Firewall: IPv4 Forward Filter
 # ============================================================
 set firewall ipv4 forward filter default-action drop
 set firewall ipv4 forward filter default-log
 set firewall ipv4 forward filter rule 10 action accept
 set firewall ipv4 forward filter rule 10 state established
 set firewall ipv4 forward filter rule 10 state related
+set firewall ipv4 forward filter rule 15 action drop
+set firewall ipv4 forward filter rule 15 description 'Block WAN→:8006'
+set firewall ipv4 forward filter rule 15 destination port 8006
+set firewall ipv4 forward filter rule 15 inbound-interface name eth1
+set firewall ipv4 forward filter rule 15 protocol tcp
 set firewall ipv4 forward filter rule 20 action accept
 set firewall ipv4 forward filter rule 20 inbound-interface name eth2
-set firewall ipv4 forward filter rule 90 action drop
-set firewall ipv4 forward filter rule 90 inbound-interface name wg0
-set firewall ipv4 forward filter rule 90 outbound-interface name eth2
+set firewall ipv4 forward filter rule 85 action accept
+set firewall ipv4 forward filter rule 85 description 'VPN→LAN: All allowed'
+set firewall ipv4 forward filter rule 85 inbound-interface name wg0
 set firewall ipv4 forward filter rule 91 action drop
 set firewall ipv4 forward filter rule 91 inbound-interface name wg0
 set firewall ipv4 forward filter rule 91 outbound-interface name eth0
+
+# ============================================================
+# Firewall: IPv6 Forward Filter
+# ============================================================
 set firewall ipv6 forward filter default-action drop
 set firewall ipv6 forward filter default-log
 set firewall ipv6 forward filter rule 10 action accept
 set firewall ipv6 forward filter rule 10 state established
 set firewall ipv6 forward filter rule 10 state related
+set firewall ipv6 forward filter rule 15 action drop
+set firewall ipv6 forward filter rule 15 description 'Block WAN→:8006'
+set firewall ipv6 forward filter rule 15 destination port 8006
+set firewall ipv6 forward filter rule 15 inbound-interface name eth1
+set firewall ipv6 forward filter rule 15 protocol tcp
 set firewall ipv6 forward filter rule 20 action accept
 set firewall ipv6 forward filter rule 20 inbound-interface name eth2
-set firewall ipv6 forward filter rule 90 action drop
-set firewall ipv6 forward filter rule 90 inbound-interface name wg0
-set firewall ipv6 forward filter rule 90 outbound-interface name eth2
+set firewall ipv6 forward filter rule 85 action accept
+set firewall ipv6 forward filter rule 85 description 'VPN→LAN: All allowed'
+set firewall ipv6 forward filter rule 85 inbound-interface name wg0
 
 # ============================================================
 # NAT: Source NAT for IPv4
@@ -139,9 +196,84 @@ set nat source rule 100 source address 192.168.1.0/24
 set nat source rule 100 translation address masquerade
 
 # ============================================================
-# Routing: Default Route via WXR
+# NAT: MAP-E Port Block NAT (15 blocks)
 # ============================================================
-set protocols static route 0.0.0.0/0 next-hop 192.168.100.1
+# set nat source rule 200 outbound-interface name 'mape'
+# set nat source rule 200 protocol 'tcp_udp'
+# set nat source rule 200 translation address '<MAP-E IPv4>'
+# set nat source rule 200 translation port '5136-5151'
+# set nat source rule 201 outbound-interface name 'mape'
+# set nat source rule 201 protocol 'tcp_udp'
+# set nat source rule 201 translation address '<MAP-E IPv4>'
+# set nat source rule 201 translation port '9232-9247'
+# set nat source rule 202 outbound-interface name 'mape'
+# set nat source rule 202 protocol 'tcp_udp'
+# set nat source rule 202 translation address '<MAP-E IPv4>'
+# set nat source rule 202 translation port '13328-13343'
+# set nat source rule 203 outbound-interface name 'mape'
+# set nat source rule 203 protocol 'tcp_udp'
+# set nat source rule 203 translation address '<MAP-E IPv4>'
+# set nat source rule 203 translation port '17424-17439'
+# set nat source rule 204 outbound-interface name 'mape'
+# set nat source rule 204 protocol 'tcp_udp'
+# set nat source rule 204 translation address '<MAP-E IPv4>'
+# set nat source rule 204 translation port '21520-21535'
+# set nat source rule 205 outbound-interface name 'mape'
+# set nat source rule 205 protocol 'tcp_udp'
+# set nat source rule 205 translation address '<MAP-E IPv4>'
+# set nat source rule 205 translation port '25616-25631'
+# set nat source rule 206 outbound-interface name 'mape'
+# set nat source rule 206 protocol 'tcp_udp'
+# set nat source rule 206 translation address '<MAP-E IPv4>'
+# set nat source rule 206 translation port '29712-29727'
+# set nat source rule 207 outbound-interface name 'mape'
+# set nat source rule 207 protocol 'tcp_udp'
+# set nat source rule 207 translation address '<MAP-E IPv4>'
+# set nat source rule 207 translation port '33808-33823'
+# set nat source rule 208 outbound-interface name 'mape'
+# set nat source rule 208 protocol 'tcp_udp'
+# set nat source rule 208 translation address '<MAP-E IPv4>'
+# set nat source rule 208 translation port '37904-37919'
+# set nat source rule 209 outbound-interface name 'mape'
+# set nat source rule 209 protocol 'tcp_udp'
+# set nat source rule 209 translation address '<MAP-E IPv4>'
+# set nat source rule 209 translation port '42000-42015'
+# set nat source rule 210 outbound-interface name 'mape'
+# set nat source rule 210 protocol 'tcp_udp'
+# set nat source rule 210 translation address '<MAP-E IPv4>'
+# set nat source rule 210 translation port '46096-46111'
+# set nat source rule 211 outbound-interface name 'mape'
+# set nat source rule 211 protocol 'tcp_udp'
+# set nat source rule 211 translation address '<MAP-E IPv4>'
+# set nat source rule 211 translation port '50192-50207'
+# set nat source rule 212 outbound-interface name 'mape'
+# set nat source rule 212 protocol 'tcp_udp'
+# set nat source rule 212 translation address '<MAP-E IPv4>'
+# set nat source rule 212 translation port '54288-54303'
+# set nat source rule 213 outbound-interface name 'mape'
+# set nat source rule 213 protocol 'tcp_udp'
+# set nat source rule 213 translation address '<MAP-E IPv4>'
+# set nat source rule 213 translation port '58384-58399'
+# set nat source rule 214 outbound-interface name 'mape'
+# set nat source rule 214 protocol 'tcp_udp'
+# set nat source rule 214 translation address '<MAP-E IPv4>'
+# set nat source rule 214 translation port '62480-62495'
+
+# ============================================================
+# Policy Route: MSS-CLAMP (MAP-E)
+# ============================================================
+set policy route MSS-CLAMP interface 'eth2'
+set policy route MSS-CLAMP rule 10 action 'accept'
+set policy route MSS-CLAMP rule 10 protocol 'tcp'
+set policy route MSS-CLAMP rule 10 set tcp-mss '1412'
+set policy route MSS-CLAMP rule 10 tcp flags syn
+
+# ============================================================
+# Routing: Static Routes
+# ============================================================
+set protocols static route 0.0.0.0/0 next-hop 192.168.100.1 distance '10'
+set protocols static route6 2001:260:700:1::1:275/128 next-hop fe80::a611:bbff:fe7d:ee11 interface 'eth1'
+set protocols static route6 ::/0 next-hop fe80::a611:bbff:fe7d:ee11 interface 'eth1'
 
 # ============================================================
 # Dynamic DNS (Cloudflare)
@@ -153,3 +285,15 @@ set service dns dynamic name cloudflare zone murata-lab.net
 set service dns dynamic name cloudflare username token
 # set service dns dynamic name cloudflare password '<Cloudflare APIトークン>'
 set service dns dynamic name cloudflare ip-version ipv6
+
+# ============================================================
+# sysctl: TCP Tuning
+# ============================================================
+set system sysctl parameter net.core.optmem_max value '65535'
+set system sysctl parameter net.core.rmem_max value '16777216'
+set system sysctl parameter net.core.somaxconn value '65535'
+set system sysctl parameter net.core.wmem_max value '16777216'
+set system sysctl parameter net.ipv4.tcp_fastopen value '3'
+set system sysctl parameter net.ipv4.tcp_mtu_probing value '1'
+set system sysctl parameter net.ipv4.tcp_rmem value '4096 65536 16777216'
+set system sysctl parameter net.ipv4.tcp_wmem value '4096 65536 16777216'
