@@ -33,21 +33,48 @@ echo_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 echo_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # ============================================================
-# MAP-E パラメータ (要設定)
+# MAP-E パラメータ (.envから読み込み)
 # ============================================================
 # これらの値はDHCPv6-PDプレフィックスから計算されています。
 # 計算ツール: http://ipv4.web.fc2.com/map-e.html
 #
 # 設定手順:
-# 1. eth1のIPv6プレフィックスを確認: show interfaces ethernet eth1
-# 2. 上記ツールでプレフィックスを入力しMAP-Eパラメータを取得
-# 3. 以下の値を書き換える
+# 1. setup-mape.env.example を setup-mape.env にコピー
+# 2. eth1のIPv6プレフィックスを確認: show interfaces ethernet eth1
+# 3. 上記ツールでプレフィックスを入力しMAP-Eパラメータを取得
+# 4. setup-mape.env に値を記入
 
-CE_ADDRESS="<YOUR_CE_ADDRESS>"           # 例: 2404:xxxx:xxxx:xx00:xx:xxxx:x00:xx00
-BR_ADDRESS="2001:260:700:1::1:275"       # 東日本BR (西日本は別アドレス)
-IPV4_ADDRESS="<YOUR_IPV4_ADDRESS>"       # 例: 133.xxx.xxx.xxx
-NGN_GATEWAY="<YOUR_NGN_GATEWAY>"         # 例: fe80::xxxx:xxff:fexx:xxxx
-FIRST_PORT_RANGE="<YOUR_PORT_RANGE>"     # 例: 5136-5151 (NAT用、最初のブロック)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/setup-mape.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo_error ".envファイルが見つかりません: $ENV_FILE"
+    echo_error "setup-mape.env.example をコピーして値を設定してください"
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+. "$ENV_FILE"
+
+# 必須パラメータチェック
+MISSING=0
+for var in MAPE_CE_ADDRESS MAPE_BR_ADDRESS MAPE_IPV4_ADDRESS MAPE_NGN_GATEWAY MAPE_FIRST_PORT_RANGE; do
+    eval val=\$$var
+    if [ -z "$val" ]; then
+        echo_error "未設定: $var"
+        MISSING=1
+    fi
+done
+if [ "$MISSING" -eq 1 ]; then
+    echo_error "$ENV_FILE に全てのパラメータを設定してください"
+    exit 1
+fi
+
+CE_ADDRESS="$MAPE_CE_ADDRESS"
+BR_ADDRESS="$MAPE_BR_ADDRESS"
+IPV4_ADDRESS="$MAPE_IPV4_ADDRESS"
+NGN_GATEWAY="$MAPE_NGN_GATEWAY"
+FIRST_PORT_RANGE="$MAPE_FIRST_PORT_RANGE"
 
 # ============================================================
 # 前提条件チェック
